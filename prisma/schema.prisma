@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  extensions = [pgvector]
+}
+
+model Card {
+  id           String                   @id
+  data         Json
+  tcgPlayerId  String?
+  embedding    Unsupported("vector")?
+  embeddings   CardEmbedding[]
+  hashes       CardHash[]
+  prices       PriceEntry[]
+  inventoryItems InventoryItem[]
+  dealItems    DealItem[]
+
+  @@index([tcgPlayerId])
+}
+
+model CardEmbedding {
+  id        String                @id @default(cuid())
+  cardId    String
+  source    String                @default("clip")
+  variant   String?
+  embedding Unsupported("vector")
+  createdAt DateTime              @default(now())
+  card      Card                  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([source])
+}
+
+model CardHash {
+  id        String   @id @default(cuid())
+  cardId    String
+  algorithm String   @default("phash")
+  hash      String
+  variant   String?
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, algorithm])
+  @@index([algorithm, hash])
+}
+
+model PriceEntry {
+  id        String   @id @default(cuid())
+  cardId    String
+  date      DateTime
+  price     Float
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, date])
+}
+
+model InventoryItem {
+  id              String   @id @default(cuid())
+  cardId          String
+  quantity        Int      @default(1)
+  type            String   @default("card") // "card" or "sealed"
+  storageType     String   // "in_case" or "not_in_case"
+  
+  // For cards: "NM", "LP", "MP", "HP"
+  // For sealed: "Sealed", "Open", "Damaged"
+  condition       String?
+  
+  // Grading info (optional, mainly for high-end cards)
+  graded          Boolean  @default(false)
+  gradingService  String?  // "PSA", "BGS", "CGC"
+  gradeScore      Int?     // 1-10 (for PSA/BGS) or 1-10 (for CGC)
+  
+  // Sealed product specific fields
+  productType     String?  // "Booster Box", "Booster Pack", "Theme Deck", "Fat Pack", etc.
+  language        String?  // "English", "Japanese", "German", etc.
+  printEdition    String?  // "1st Edition", "Unlimited", etc.
+  productCode     String?  // SKU or set code
+  
+  pricePurchasedAt Float   // Price paid for this specific unit
+  purchasedAt     DateTime // Date purchased
+  purchasedFrom   String?  // Where it was purchased
+  
+  priceCurrentAsk  Float?   // Current market price
+  
+  priceSold        Float?   // Sale price if sold
+  soldAt           DateTime? // Date sold
+  soldTo           String?  // Where it was sold
+  
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  card             Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([type])
+  @@index([storageType])
+  @@index([createdAt])
+}
+
+model Deal {
+  id           String      @id @default(cuid())
+  dateCreated  DateTime    @default(now())
+  dateStarted  DateTime?   // When deal started at a show
+  dateFinalized DateTime?   // When deal was completed
+  
+  location     String?     // Location name (e.g., "East Bay Card Show")
+  
+  incoming     DealItem[]  @relation("incoming")
+  outgoing     DealItem[]  @relation("outgoing")
+  
+  notes        String?
+  status       String      @default("pending") // "pending", "finalized"
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model DealItem {
+  id        String   @id @default(cuid())
+  dealId    String
+  cardId    String?  // NULL if it's sealed product or cash
+  direction String   // "incoming" or "outgoing"
+  quantity  Int      @default(1)
+  price     Float
+  itemType  String   @default("card") // "card", "sealed", "slab", "cash"
+  notes     String?  // Description for non-card items (sealed product name, slab label)
+  
+  deal      Deal     @relation(name: "incoming", fields: [dealId], references: [id], onDelete: Cascade)
+  card      Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([cardId])
+}
+
+model DealLocation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  location  String?  // Current session location
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  notes     String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model Card {
+  id             String          @id
+  data           Json
+  tcgPlayerId    String?
+  embedding      Unsupported("vector")?
+  embeddings     CardEmbedding[]
+  hashes         CardHash[]
+  prices         PriceEntry[]
+  inventoryItems InventoryItem[]
+  dealItems      DealItem[]
+
+  @@index([tcgPlayerId])
+}
+
+model CardEmbedding {
+  id        String                @id @default(cuid())
+  cardId    String
+  source    String                @default("clip")
+  variant   String?
+  embedding Unsupported("vector")
+  createdAt DateTime              @default(now())
+  card      Card                  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([source])
+}
+
+model CardHash {
+  id        String   @id @default(cuid())
+  cardId    String
+  algorithm String   @default("phash")
+  hash      String
+  variant   String?
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, algorithm])
+  @@index([algorithm, hash])
+}
+
+model PriceEntry {
+  id        String   @id @default(cuid())
+  cardId    String
+  date      DateTime
+  price     Float
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId, date])
+}
+
+model InventoryItem {
+  id               String   @id @default(cuid())
+  cardId           String
+  quantity         Int      @default(1)
+  type             String   @default("card") // "card", "sealed", or "slab"
+  condition        String?  // Cards: NM/LP/MP/HP, Sealed/Slab: Sealed/Open/Damaged
+  storageType      String
+  pricePurchasedAt Float
+  purchasedAt      DateTime
+  purchasedFrom    String?
+  priceCurrentAsk  Float?
+  priceSold        Float?
+  soldAt           DateTime?
+  soldTo           String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  card             Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([cardId])
+  @@index([storageType])
+  @@index([createdAt])
+}
+
+model Deal {
+  id            String     @id @default(cuid())
+  dateCreated   DateTime   @default(now())
+  dateStarted   DateTime?
+  dateFinalized DateTime?
+  location      String?
+  items         DealItem[]
+  notes         String?
+  status        String     @default("pending")
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model DealItem {
+  id        String  @id @default(cuid())
+  dealId    String
+  cardId    String?
+  direction String
+  quantity  Int     @default(1)
+  price     Float
+  itemType  String  @default("card")
+  notes     String?
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  card      Card?   @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([cardId])
+}
+
+model DealLocation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  location  String?
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

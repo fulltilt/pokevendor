@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pokevendor
+      POSTGRES_PASSWORD: pokevendor
+      POSTGRES_DB: pokevendor
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pokevendor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: "postgresql://pokevendor:pokevendor@db:5432/pokevendor"
+      NODE_ENV: development
+      PORT: 3001
+    depends_on:
+      db:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
+    command: sh -lc "npx prisma generate && npx prisma db push && npm run dev"
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: "http://localhost:3001"
+      VITE_API_PROXY_TARGET: "http://api:3001"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web/src:/app/src
+    command: npm run dev
+
+volumes:
+  postgres_data:

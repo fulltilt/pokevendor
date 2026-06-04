@@ -1,0 +1,6 @@
+# Prisma
+npx prisma generate
+npx prisma db push
+
+# Or run migrations:
+npx prisma migrate dev
