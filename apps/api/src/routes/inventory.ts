@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -158,6 +158,10 @@ router.get("/", async (req: Request, res: Response) => {
     const storageFilter =
       storageType && typeof storageType === "string" ? storageType : null;
 
+    const sortBy =
+      typeof req.query.sortBy === "string" ? req.query.sortBy : null;
+    const sortDirRaw = req.query.sortDir === "asc" ? "asc" : "desc";
+
     const valueAggQuery = storageFilter
       ? prisma.$queryRaw<[{ total: number }]>`
           SELECT COALESCE(SUM(
@@ -173,14 +177,45 @@ router.get("/", async (req: Request, res: Response) => {
           FROM "InventoryItem"
         `;
 
-    const [items, total, valueAgg] = await Promise.all([
-      prisma.inventoryItem.findMany({
+    let items: Awaited<ReturnType<typeof prisma.inventoryItem.findMany>>;
+
+    if (sortBy === "totalValue") {
+      // Computed sort — get IDs in order via raw SQL, then fetch with relations
+      const sortedRows = await prisma.$queryRaw<{ id: string }[]>(
+        Prisma.sql`
+          SELECT id FROM "InventoryItem"
+          ${storageFilter ? Prisma.sql`WHERE "storageType" = ${storageFilter}` : Prisma.sql``}
+          ORDER BY (COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity)
+          ${sortDirRaw === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`}
+          LIMIT ${limit} OFFSET ${offset}
+        `,
+      );
+      const ids = sortedRows.map((r) => r.id);
+      const unordered = await prisma.inventoryItem.findMany({
+        where: { id: { in: ids } },
+        include: { card: { include: { prices: true } } },
+      });
+      const byId = new Map(unordered.map((item) => [item.id, item]));
+      items = ids.map((id) => byId.get(id)).filter(Boolean) as typeof unordered;
+    } else {
+      let orderBy: Prisma.InventoryItemOrderByWithRelationInput;
+      if (sortBy === "condition") {
+        orderBy = { condition: sortDirRaw };
+      } else if (sortBy === "priceCurrentAsk") {
+        orderBy = { priceCurrentAsk: { sort: sortDirRaw, nulls: "last" } };
+      } else {
+        orderBy = { createdAt: "desc" };
+      }
+      items = await prisma.inventoryItem.findMany({
         where,
         include: { card: { include: { prices: true } } },
         take: limit,
         skip: offset,
-        orderBy: { createdAt: "desc" },
-      }),
+        orderBy,
+      });
+    }
+
+    const [total, valueAgg] = await Promise.all([
       prisma.inventoryItem.count({ where }),
       valueAggQuery,
     ]);

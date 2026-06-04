@@ -185,7 +185,6 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
         quantity,
         price,
         itemType,
-        notes: notes || null,
       },
     });
 
@@ -452,6 +451,41 @@ router.get("/", async (req: Request, res: Response) => {
     res.json({ deals: formatted, total });
   } catch {
     res.status(500).json({ error: "Failed to fetch deals" });
+  }
+});
+
+// Update deal (location, notes)
+router.patch("/:dealId", async (req: Request, res: Response) => {
+  try {
+    const { dealId } = req.params;
+    const { location, notes } = req.body;
+
+    const deal = await prisma.deal.update({
+      where: { id: dealId },
+      data: {
+        ...(location !== undefined && { location }),
+        ...(notes !== undefined && { notes }),
+      },
+    });
+
+    res.json({ success: true, deal });
+  } catch {
+    res.status(500).json({ error: "Failed to update deal" });
+  }
+});
+
+// Delete deal (cascade deletes DealItems via FK)
+router.delete("/:dealId", async (req: Request, res: Response) => {
+  try {
+    const { dealId } = req.params;
+
+    await prisma.deal.delete({
+      where: { id: dealId },
+    });
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: "Failed to delete deal" });
   }
 });
 

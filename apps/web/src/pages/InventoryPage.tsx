@@ -94,7 +94,25 @@ export const InventoryPage: FC = () => {
   const [inventorySearch, setInventorySearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const pageSize = 50;
+  const pageSize = 20;
+  type InventorySortBy = "condition" | "priceCurrentAsk" | "totalValue" | null;
+  const [sortBy, setSortBy] = useState<InventorySortBy>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (col: NonNullable<InventorySortBy>) => {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir("desc");
+    }
+    setPage(1);
+  };
+
+  const sortArrow = (col: NonNullable<InventorySortBy>) => {
+    if (sortBy !== col) return " ⇅";
+    return sortDir === "asc" ? " ↑" : " ↓";
+  };
 
   let manualItemPlaceholder = "e.g., Charizard Base Set";
   if (addItemType === "sealed") {
@@ -137,6 +155,10 @@ export const InventoryPage: FC = () => {
           filterStorageType === "all" ? {} : { storageType: filterStorageType };
         params.limit = pageSize;
         params.offset = (page - 1) * pageSize;
+        if (sortBy) {
+          params.sortBy = sortBy;
+          params.sortDir = sortDir;
+        }
         const response = await axios.get("/api/inventory", { params });
         setItems(response.data.items);
         setTotalValue(response.data.totalValue);
@@ -149,13 +171,17 @@ export const InventoryPage: FC = () => {
     };
 
     void loadInventory();
-  }, [filterStorageType, page]);
+  }, [filterStorageType, page, sortBy, sortDir]);
 
   const reloadInventory = async () => {
     const params: Record<string, string | number> =
       filterStorageType === "all" ? {} : { storageType: filterStorageType };
     params.limit = pageSize;
     params.offset = (page - 1) * pageSize;
+    if (sortBy) {
+      params.sortBy = sortBy;
+      params.sortDir = sortDir;
+    }
     const response = await axios.get("/api/inventory", { params });
     setItems(response.data.items);
     setTotalValue(response.data.totalValue);
@@ -228,15 +254,20 @@ export const InventoryPage: FC = () => {
     setInventoryNotice(null);
 
     try {
-      const priceUpdates: Record<string, number | null> = {};
+      // Only refresh card-type items; skip sealed/slab
       const cardItems = items.filter(
         (item) => (item.type ?? "card") === "card",
       );
 
-      // Fetch prices for all unique cards in inventory
+      // Fetch prices once per unique cardId, store the full price map
       const uniqueCardIds = Array.from(
-        new Set(cardItems.map((item: InventoryItem) => item.cardId)),
+        new Set(cardItems.map((item) => item.cardId)),
       );
+
+      const pricesByCardId: Record<
+        string,
+        { nm: number | null; lp: number | null; mp: number | null } | null
+      > = {};
 
       for (const cardId of uniqueCardIds) {
         try {
@@ -247,51 +278,36 @@ export const InventoryPage: FC = () => {
               mp: number | null;
             } | null;
           }>(`/api/cards/${cardId}/prices`);
-
-          if (typeof cardId === "string") {
-            const conditionByCard = cardItems.find(
-              (item) => item.cardId === cardId,
-            )?.condition;
-            const normalizedCondition = normalizeCardCondition(conditionByCard);
-            priceUpdates[cardId] = pickPriceByCondition(
-              priceRes.data.prices,
-              normalizedCondition,
-            );
-          }
+          pricesByCardId[cardId] = priceRes.data.prices ?? null;
         } catch (error) {
           console.error(`Failed to fetch price for card ${cardId}:`, error);
-          if (typeof cardId === "string") {
-            priceUpdates[cardId] = null;
-          }
+          pricesByCardId[cardId] = null;
         }
       }
 
-      // Update all card inventory items with new prices
+      // Update each item using its own condition against the fetched price map
+      let updatedCount = 0;
       for (const item of cardItems) {
-        const newPrice = priceUpdates[item.cardId];
-        if (newPrice !== undefined && newPrice !== null) {
-          try {
-            await axios.patch(`/api/inventory/${item.id}`, {
-              priceCurrentAsk: newPrice,
-            });
-          } catch (error) {
-            console.error(`Failed to update price for item ${item.id}:`, error);
-          }
+        const prices = pricesByCardId[item.cardId];
+        if (!prices) continue;
+
+        const normalizedCondition = normalizeCardCondition(item.condition);
+        const newPrice = pickPriceByCondition(prices, normalizedCondition);
+        if (newPrice === null) continue;
+
+        try {
+          await axios.patch(`/api/inventory/${item.id}`, {
+            priceCurrentAsk: newPrice,
+          });
+          updatedCount++;
+        } catch (error) {
+          console.error(`Failed to update price for item ${item.id}:`, error);
         }
       }
 
-      // Reload inventory
-      const params =
-        filterStorageType === "all" ? {} : { storageType: filterStorageType };
-      const response = await axios.get("/api/inventory", { params });
-      setItems(response.data.items);
-      setTotalValue(response.data.totalValue);
-
-      const updatedCount = Object.values(priceUpdates).filter(
-        (p) => p !== null,
-      ).length;
+      await reloadInventory();
       setInventoryNotice(
-        `Refreshed prices for ${updatedCount} cards (${uniqueCardIds.length} total).`,
+        `Refreshed prices for ${updatedCount} item${updatedCount !== 1 ? "s" : ""} (${uniqueCardIds.length} unique card${uniqueCardIds.length !== 1 ? "s" : ""}).`,
       );
     } catch (error) {
       console.error("Failed to refresh prices:", error);
@@ -435,6 +451,7 @@ export const InventoryPage: FC = () => {
             onClick={() => {
               setFilterStorageType("all");
               setPage(1);
+              setSortBy(null);
             }}
             className={filterStorageType === "all" ? "active" : ""}
           >
@@ -445,6 +462,7 @@ export const InventoryPage: FC = () => {
             onClick={() => {
               setFilterStorageType("in_case");
               setPage(1);
+              setSortBy(null);
             }}
             className={filterStorageType === "in_case" ? "active" : ""}
           >
@@ -455,6 +473,7 @@ export const InventoryPage: FC = () => {
             onClick={() => {
               setFilterStorageType("not_in_case");
               setPage(1);
+              setSortBy(null);
             }}
             className={filterStorageType === "not_in_case" ? "active" : ""}
           >
@@ -498,12 +517,27 @@ export const InventoryPage: FC = () => {
                 <th></th>
                 <th>Card</th>
                 <th>Type</th>
-                <th>Quantity</th>
-                <th>Condition</th>
+                <th>Qty</th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("condition")}
+                >
+                  Condition{sortArrow("condition")}
+                </th>
                 <th>Storage</th>
-                <th>Purchase Price</th>
-                <th>Current Ask</th>
-                <th>Total Value</th>
+                <th>Purchase</th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("priceCurrentAsk")}
+                >
+                  Ask{sortArrow("priceCurrentAsk")}
+                </th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("totalValue")}
+                >
+                  Total Value{sortArrow("totalValue")}
+                </th>
                 <th></th>
               </tr>
             </thead>

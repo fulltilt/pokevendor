@@ -77,6 +77,13 @@ export const DealHistoryPage: FC = () => {
   const [totalDeals, setTotalDeals] = useState(0);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // --- CRUD modals state ---
+  const [editingDeal, setEditingDeal] = useState<DealSummary | null>(null);
+  const [editLocation, setEditLocation] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [deletingDeal, setDeletingDeal] = useState<DealSummary | null>(null);
+  const [crudLoading, setCrudLoading] = useState(false);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -126,6 +133,94 @@ export const DealHistoryPage: FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const grandNetCash = analytics.reduce((s, a) => s + a.totalNetCash, 0);
+
+  // --- CRUD Handlers ---
+  const handleEditOpen = (deal: DealSummary) => {
+    setEditingDeal(deal);
+    setEditLocation(deal.location || "");
+    setEditNotes(deal.notes || "");
+  };
+
+  const handleEditSave = async () => {
+    if (!editingDeal) return;
+    setCrudLoading(true);
+    try {
+      await axios.patch(`/api/deals/${editingDeal.id}`, {
+        location: editLocation.trim(),
+        notes: editNotes.trim(),
+      });
+      setEditingDeal(null);
+      // Reload deals
+      const res = await axios.get<{ deals: DealSummary[]; total: number }>(
+        "/api/deals",
+        {
+          params: {
+            status: "finalized",
+            q: q.trim() || undefined,
+            sortBy,
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+          },
+        },
+      );
+      setDeals(res.data.deals ?? []);
+    } catch (error) {
+      console.error("Failed to update deal:", error);
+    } finally {
+      setCrudLoading(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingDeal) return;
+    setCrudLoading(true);
+    try {
+      await axios.delete(`/api/deals/${deletingDeal.id}`);
+      setDeletingDeal(null);
+      // Reload deals
+      const res = await axios.get<{ deals: DealSummary[]; total: number }>(
+        "/api/deals",
+        {
+          params: {
+            status: "finalized",
+            q: q.trim() || undefined,
+            sortBy,
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+          },
+        },
+      );
+      setDeals(res.data.deals ?? []);
+      setTotal(res.data.total ?? 0);
+    } catch (error) {
+      console.error("Failed to delete deal:", error);
+    } finally {
+      setCrudLoading(false);
+    }
+  };
+
+  const handleCreateNew = async () => {
+    try {
+      const res = await axios.post<{ deal: { id: string } }>("/api/deals", {
+        location: "",
+      });
+      // Redirect to deal tracker with the new deal (or show it in the tracker)
+      // For now, reload the deals list
+      const list = await axios.get<{ deals: DealSummary[]; total: number }>(
+        "/api/deals",
+        {
+          params: {
+            status: "active",
+            limit: 50,
+          },
+        },
+      );
+      alert("New deal created! Go to Deal Tracker to add items.");
+    } catch (error) {
+      console.error("Failed to create new deal:", error);
+      alert("Failed to create new deal");
+    }
+  };
 
   return (
     <div className="deal-history-page">
@@ -197,7 +292,7 @@ export const DealHistoryPage: FC = () => {
                   <th>Incoming</th>
                   <th>Outgoing</th>
                   <th>Net Cash</th>
-                  <th></th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -207,9 +302,6 @@ export const DealHistoryPage: FC = () => {
                     <Fragment key={deal.id}>
                       <tr
                         className={`deal-history-row${isExpanded ? " expanded" : ""}`}
-                        onClick={() =>
-                          setExpandedId(isExpanded ? null : deal.id)
-                        }
                       >
                         <td>
                           {fmtDate(deal.dateFinalized ?? deal.dateCreated)}
@@ -227,8 +319,37 @@ export const DealHistoryPage: FC = () => {
                         <td className={netClass(deal.netCash)}>
                           {fmtSigned(deal.netCash)}
                         </td>
-                        <td className="deal-expand-cell">
-                          {isExpanded ? "▲" : "▼"}
+                        <td className="deal-actions-cell">
+                          <button
+                            type="button"
+                            className="action-btn action-btn-edit"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditOpen(deal);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="action-btn action-btn-delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingDeal(deal);
+                            }}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            type="button"
+                            className="deal-expand-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedId(isExpanded ? null : deal.id);
+                            }}
+                          >
+                            {isExpanded ? "▲" : "▼"}
+                          </button>
                         </td>
                       </tr>
 
@@ -396,6 +517,125 @@ export const DealHistoryPage: FC = () => {
             </>
           )}
         </>
+      )}
+
+      {/* --- EDIT DEAL MODAL --- */}
+      {editingDeal && (
+        <div className="modal-overlay" onClick={() => setEditingDeal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Deal</h2>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setEditingDeal(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Location</label>
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="e.g., Emerald City Card Show"
+                />
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Optional notes about this deal…"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="modal-btn modal-btn-cancel"
+                onClick={() => setEditingDeal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-btn modal-btn-primary"
+                onClick={handleEditSave}
+                disabled={crudLoading}
+              >
+                {crudLoading ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- DELETE CONFIRMATION MODAL --- */}
+      {deletingDeal && (
+        <div className="modal-overlay" onClick={() => setDeletingDeal(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Delete Deal</h2>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setDeletingDeal(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to delete this deal?</p>
+              <div className="deal-summary-box">
+                <p>
+                  <strong>
+                    {fmtDate(
+                      deletingDeal.dateFinalized ?? deletingDeal.dateCreated,
+                    )}
+                  </strong>
+                  {deletingDeal.location && (
+                    <>
+                      {" at "}
+                      <strong>{deletingDeal.location}</strong>
+                    </>
+                  )}
+                </p>
+                <p>
+                  Incoming: {fmt(deletingDeal.incomingTotal)} | Outgoing:{" "}
+                  {fmt(deletingDeal.outgoingTotal)} | Net:{" "}
+                  <span className={netClass(deletingDeal.netCash)}>
+                    {fmtSigned(deletingDeal.netCash)}
+                  </span>
+                </p>
+              </div>
+              <p className="text-warning">
+                This action cannot be undone. All items in this deal will be
+                permanently deleted.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="modal-btn modal-btn-cancel"
+                onClick={() => setDeletingDeal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-btn modal-btn-danger"
+                onClick={handleDeleteConfirm}
+                disabled={crudLoading}
+              >
+                {crudLoading ? "Deleting…" : "Delete Deal"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

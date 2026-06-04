@@ -810,23 +810,45 @@ export const DealTrackerPage: FC = () => {
                     <div className="empty-deal-items">No items yet.</div>
                   )}
                   {currentDeal[col].map((item) => (
-                    <div key={item.id} className="deal-item-row">
-                      <span className="deal-item-name">
-                        {item.notes ||
-                          item.card?.data?.name ||
-                          item.cardId ||
-                          item.itemType}
-                        {item.itemType !== "card" && (
-                          <span className="item-type-badge">
-                            {" "}
-                            [{item.itemType}]
+                    <div key={item.id} className="deal-bucket-row">
+                      {item.card?.data?.images?.small ? (
+                        <img
+                          src={item.card.data.images.small}
+                          alt={item.card.data.name}
+                          className="deal-bucket-thumb"
+                        />
+                      ) : (
+                        <div className="deal-bucket-thumb deal-bucket-thumb--empty" />
+                      )}
+                      <div className="deal-bucket-info">
+                        <span className="deal-bucket-name">
+                          {item.notes ||
+                            item.card?.data?.name ||
+                            item.cardId ||
+                            item.itemType}
+                          {item.itemType !== "card" && (
+                            <span className="item-type-badge">
+                              {" "}
+                              [{item.itemType}]
+                            </span>
+                          )}
+                        </span>
+                        {(item.card?.data?.number ||
+                          item.card?.data?.set?.name) && (
+                          <span className="deal-bucket-meta">
+                            {item.card.data.number &&
+                              `#${item.card.data.number}`}
+                            {item.card.data.number &&
+                              item.card.data.set?.name &&
+                              " · "}
+                            {item.card.data.set?.name}
                           </span>
                         )}
-                      </span>
-                      <span className="deal-item-price">
-                        {item.quantity} × $
-                        {toFiniteNumber(item.price).toFixed(2)}
-                      </span>
+                        <span className="deal-bucket-price">
+                          {item.quantity} × $
+                          {toFiniteNumber(item.price).toFixed(2)}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         className="edit-btn"
