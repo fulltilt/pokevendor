@@ -195,6 +195,74 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
   }
 });
 
+// Deal analytics grouped by location (must be before /:dealId)
+router.get("/analytics", async (_req: Request, res: Response) => {
+  try {
+    const deals = await prisma.deal.findMany({
+      where: { status: "finalized" },
+      include: { items: true },
+      orderBy: { dateFinalized: "desc" },
+    });
+
+    const locationMap = new Map<
+      string,
+      {
+        location: string;
+        dealCount: number;
+        totalIncoming: number;
+        totalOutgoing: number;
+        lastDealDate: Date | null;
+      }
+    >();
+
+    for (const deal of deals) {
+      const loc = deal.location || "Unspecified";
+      const incomingTotal = deal.items
+        .filter((i) => i.direction === "incoming")
+        .reduce((s, i) => s + i.price * i.quantity, 0);
+      const outgoingTotal = deal.items
+        .filter((i) => i.direction === "outgoing")
+        .reduce((s, i) => s + i.price * i.quantity, 0);
+
+      const existing = locationMap.get(loc);
+      if (existing) {
+        existing.dealCount += 1;
+        existing.totalIncoming += incomingTotal;
+        existing.totalOutgoing += outgoingTotal;
+        if (
+          !existing.lastDealDate ||
+          (deal.dateFinalized && deal.dateFinalized > existing.lastDealDate)
+        ) {
+          existing.lastDealDate = deal.dateFinalized;
+        }
+      } else {
+        locationMap.set(loc, {
+          location: loc,
+          dealCount: 1,
+          totalIncoming: incomingTotal,
+          totalOutgoing: outgoingTotal,
+          lastDealDate: deal.dateFinalized,
+        });
+      }
+    }
+
+    const analytics = Array.from(locationMap.values())
+      .map((loc) => ({
+        ...loc,
+        totalNetCash: loc.totalOutgoing - loc.totalIncoming,
+        avgNetCash: (loc.totalOutgoing - loc.totalIncoming) / loc.dealCount,
+      }))
+      .sort(
+        (a, b) =>
+          (b.lastDealDate?.getTime() ?? 0) - (a.lastDealDate?.getTime() ?? 0),
+      );
+
+    res.json({ analytics, totalDeals: deals.length });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
 // Get deal details
 router.get("/:dealId", async (req: Request, res: Response) => {
   try {
@@ -315,28 +383,73 @@ router.post("/:dealId/finalize", async (req: Request, res: Response) => {
   }
 });
 
-// List deals
+// List deals (filterable, searchable, sortable)
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status = "pending", limit = 20, offset = 0 } = req.query;
+    const { status, q, sortBy, limit, offset } = req.query;
+    const pageLimit = Math.min(Number(limit ?? 50), 100);
+    const pageOffset = Math.max(Number(offset ?? 0), 0);
+    const search = typeof q === "string" && q.trim() ? q.trim() : null;
 
-    const deals = await prisma.deal.findMany({
-      where: { status: typeof status === "string" ? status : "pending" },
-      include: {
-        items: true,
-      },
-      take: Number(limit),
-      skip: Number(offset),
-      orderBy: { createdAt: "desc" },
+    const where: Prisma.DealWhereInput = {};
+    if (typeof status === "string") {
+      where.status = status;
+    }
+    if (search) {
+      where.OR = [
+        { location: { contains: search, mode: "insensitive" } },
+        { notes: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    let orderBy: Prisma.DealOrderByWithRelationInput;
+    if (sortBy === "dateAsc") {
+      orderBy = { dateFinalized: "asc" };
+    } else if (sortBy === "location") {
+      orderBy = { location: "asc" };
+    } else {
+      orderBy = { dateFinalized: "desc" };
+    }
+
+    const [deals, total] = await Promise.all([
+      prisma.deal.findMany({
+        where,
+        include: {
+          items: {
+            include: {
+              card: { select: { id: true, data: true, tcgPlayerId: true } },
+            },
+          },
+        },
+        take: pageLimit,
+        skip: pageOffset,
+        orderBy,
+      }),
+      prisma.deal.count({ where }),
+    ]);
+
+    const formatted = deals.map((deal) => {
+      const incoming = deal.items.filter((i) => i.direction === "incoming");
+      const outgoing = deal.items.filter((i) => i.direction === "outgoing");
+      const incomingTotal = incoming.reduce(
+        (s, i) => s + i.price * i.quantity,
+        0,
+      );
+      const outgoingTotal = outgoing.reduce(
+        (s, i) => s + i.price * i.quantity,
+        0,
+      );
+      return {
+        ...deal,
+        incoming,
+        outgoing,
+        incomingTotal,
+        outgoingTotal,
+        netCash: outgoingTotal - incomingTotal,
+      };
     });
 
-    const formatted = deals.map((deal) => ({
-      ...deal,
-      incoming: deal.items.filter((item) => item.direction === "incoming"),
-      outgoing: deal.items.filter((item) => item.direction === "outgoing"),
-    }));
-
-    res.json(formatted);
+    res.json({ deals: formatted, total });
   } catch {
     res.status(500).json({ error: "Failed to fetch deals" });
   }

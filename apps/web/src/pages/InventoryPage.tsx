@@ -92,6 +92,9 @@ export const InventoryPage: FC = () => {
   const [editManualItemName, setEditManualItemName] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 50;
 
   let manualItemPlaceholder = "e.g., Charizard Base Set";
   if (addItemType === "sealed") {
@@ -130,11 +133,14 @@ export const InventoryPage: FC = () => {
     const loadInventory = async () => {
       setLoading(true);
       try {
-        const params =
+        const params: Record<string, string | number> =
           filterStorageType === "all" ? {} : { storageType: filterStorageType };
+        params.limit = pageSize;
+        params.offset = (page - 1) * pageSize;
         const response = await axios.get("/api/inventory", { params });
         setItems(response.data.items);
         setTotalValue(response.data.totalValue);
+        setTotalCount(response.data.total ?? 0);
       } catch (error) {
         console.error("Failed to fetch inventory:", error);
       } finally {
@@ -143,16 +149,23 @@ export const InventoryPage: FC = () => {
     };
 
     void loadInventory();
-  }, [filterStorageType]);
+  }, [filterStorageType, page]);
+
+  const reloadInventory = async () => {
+    const params: Record<string, string | number> =
+      filterStorageType === "all" ? {} : { storageType: filterStorageType };
+    params.limit = pageSize;
+    params.offset = (page - 1) * pageSize;
+    const response = await axios.get("/api/inventory", { params });
+    setItems(response.data.items);
+    setTotalValue(response.data.totalValue);
+    setTotalCount(response.data.total ?? 0);
+  };
 
   const removeInventoryItem = async (itemId: string) => {
     try {
       await axios.delete(`/api/inventory/${itemId}`);
-      const params =
-        filterStorageType === "all" ? {} : { storageType: filterStorageType };
-      const response = await axios.get("/api/inventory", { params });
-      setItems(response.data.items);
-      setTotalValue(response.data.totalValue);
+      await reloadInventory();
     } catch (error) {
       console.error("Failed to remove inventory item:", error);
     }
@@ -194,11 +207,7 @@ export const InventoryPage: FC = () => {
         notes: editManualItemName || undefined,
       });
 
-      const params =
-        filterStorageType === "all" ? {} : { storageType: filterStorageType };
-      const response = await axios.get("/api/inventory", { params });
-      setItems(response.data.items);
-      setTotalValue(response.data.totalValue);
+      await reloadInventory();
       setInventoryNotice("Inventory item updated successfully.");
       closeEditModal();
     } catch (error) {
@@ -423,21 +432,30 @@ export const InventoryPage: FC = () => {
         <div className="filter-buttons">
           <button
             type="button"
-            onClick={() => setFilterStorageType("all")}
+            onClick={() => {
+              setFilterStorageType("all");
+              setPage(1);
+            }}
             className={filterStorageType === "all" ? "active" : ""}
           >
             All
           </button>
           <button
             type="button"
-            onClick={() => setFilterStorageType("in_case")}
+            onClick={() => {
+              setFilterStorageType("in_case");
+              setPage(1);
+            }}
             className={filterStorageType === "in_case" ? "active" : ""}
           >
             In Case
           </button>
           <button
             type="button"
-            onClick={() => setFilterStorageType("not_in_case")}
+            onClick={() => {
+              setFilterStorageType("not_in_case");
+              setPage(1);
+            }}
             className={filterStorageType === "not_in_case" ? "active" : ""}
           >
             Not In Case
@@ -456,6 +474,12 @@ export const InventoryPage: FC = () => {
 
         <div className="inventory-value">
           Total Value: <strong>${toFiniteNumber(totalValue).toFixed(2)}</strong>
+          {totalCount > 0 && (
+            <span className="inventory-count">
+              {" "}
+              &mdash; {totalCount} item{totalCount === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -551,6 +575,34 @@ export const InventoryPage: FC = () => {
               )}
             </tbody>
           </table>
+
+          {totalCount > pageSize && (
+            <div className="pagination-controls">
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </button>
+              <span className="page-indicator">
+                Page {page} of {Math.ceil(totalCount / pageSize)}
+              </span>
+              <button
+                type="button"
+                className="page-btn"
+                onClick={() =>
+                  setPage((p) =>
+                    Math.min(Math.ceil(totalCount / pageSize), p + 1),
+                  )
+                }
+                disabled={page >= Math.ceil(totalCount / pageSize)}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </>
       )}
 

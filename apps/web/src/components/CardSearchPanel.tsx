@@ -10,6 +10,9 @@ interface SearchCardData {
     small?: string;
     large?: string;
   };
+  set?: {
+    name?: string;
+  };
 }
 
 export interface SearchCard {
@@ -167,12 +170,14 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
 
   return (
     <section className="card-search-panel">
-      <div className="search-panel-header">
-        <div>
-          <h2>{title}</h2>
-          {description && <p className="panel-description">{description}</p>}
+      {(title || description) && (
+        <div className="search-panel-header">
+          <div>
+            {title && <h2>{title}</h2>}
+            {description && <p className="panel-description">{description}</p>}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="card-search">
         <div className="search-controls">

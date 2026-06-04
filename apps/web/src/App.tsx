@@ -2,8 +2,9 @@ import { useState } from "react";
 import "./App.css";
 import { InventoryPage } from "./pages/InventoryPage";
 import { DealTrackerPage } from "./pages/DealTrackerPage";
+import { DealHistoryPage } from "./pages/DealHistoryPage";
 
-type Page = "inventory" | "deals";
+type Page = "inventory" | "deals" | "history";
 
 export const App = () => {
   const [currentPage, setCurrentPage] = useState<Page>("inventory");
@@ -27,12 +28,20 @@ export const App = () => {
           >
             Deal Tracker
           </button>
+          <button
+            type="button"
+            className={`nav-btn ${currentPage === "history" ? "active" : ""}`}
+            onClick={() => setCurrentPage("history")}
+          >
+            Deal History
+          </button>
         </div>
       </nav>
 
       <main className="main-content">
         {currentPage === "inventory" && <InventoryPage />}
         {currentPage === "deals" && <DealTrackerPage />}
+        {currentPage === "history" && <DealHistoryPage />}
       </main>
     </div>
   );

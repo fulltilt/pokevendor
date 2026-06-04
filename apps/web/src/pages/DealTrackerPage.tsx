@@ -366,6 +366,11 @@ export const DealTrackerPage: FC = () => {
         const existing = acc.get(item.cardId);
         const itemName = item.notes || item.card?.data?.name || item.cardId;
         const itemNumber = item.card?.data?.number ?? "";
+        const itemImage =
+          item.card?.data?.images?.small ||
+          item.card?.data?.images?.large ||
+          "";
+        const setName = item.card?.data?.set?.name ?? "";
         const suggestedPrice = toFiniteNumber(
           item.priceCurrentAsk,
           toFiniteNumber(item.pricePurchasedAt),
@@ -383,6 +388,8 @@ export const DealTrackerPage: FC = () => {
           cardId: item.cardId,
           itemName,
           itemNumber,
+          itemImage,
+          setName,
           totalQuantity: item.quantity,
           suggestedPrice,
         });
@@ -394,6 +401,8 @@ export const DealTrackerPage: FC = () => {
           cardId: string;
           itemName: string;
           itemNumber: string;
+          itemImage: string;
+          setName: string;
           totalQuantity: number;
           suggestedPrice: number;
         }
@@ -424,7 +433,7 @@ export const DealTrackerPage: FC = () => {
 
       <div className="deal-controls">
         {!currentDeal && (
-          <>
+          <div className="new-deal-form-card">
             <div className="new-deal-form">
               <select
                 value={location}
@@ -491,51 +500,14 @@ export const DealTrackerPage: FC = () => {
                 </div>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {dealNotice && <div className="search-status-banner">{dealNotice}</div>}
 
         {currentDeal && (
           <>
-            <div className="deal-summary">
-              <h3>
-                Current Deal at {currentDeal.location || "Unspecified Location"}
-              </h3>
-
-              <div className="deal-totals">
-                <div className="total-item">
-                  <span>Incoming:</span>
-                  <strong>${incomingTotal.toFixed(2)}</strong>
-                </div>
-                <div className="total-item">
-                  <span>Outgoing:</span>
-                  <strong>${outgoingTotal.toFixed(2)}</strong>
-                </div>
-                <div className={`net-cash ${netCashClass}`}>
-                  <span>Net Cash:</span>
-                  <strong>${netCash.toFixed(2)}</strong>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={finalizeDeal}
-                className="finalize-btn"
-              >
-                Finalize Deal
-              </button>
-            </div>
-
             <div className="context-panel">
-              <div className="context-panel-header">
-                <h2>Add Incoming Cards</h2>
-                <p className="panel-description">
-                  Search the card database and click a result to add it to the
-                  incoming side.
-                </p>
-              </div>
-
               <div className="context-form-grid">
                 <label className="field-group">
                   <span>Quantity</span>
@@ -559,11 +531,7 @@ export const DealTrackerPage: FC = () => {
                 </label>
               </div>
 
-              <CardSearchPanel
-                title="Find a Card"
-                description="Search by name or card number. Clicking a result adds it to incoming."
-                onCardSelect={addCardToDeal}
-              />
+              <CardSearchPanel title="" onCardSelect={addCardToDeal} />
 
               <div className="manual-entry-section">
                 <button
@@ -646,23 +614,13 @@ export const DealTrackerPage: FC = () => {
             </div>
 
             <div className="context-panel">
-              <div className="context-panel-header">
-                <h2>Add Outgoing from Inventory</h2>
-                <p className="panel-description">
-                  Only cards currently in inventory can be added to outgoing.
-                </p>
-              </div>
-
-              <label className="field-group field-group-wide">
-                <span>Search Inventory</span>
-                <input
-                  type="text"
-                  className="search-input"
-                  value={outgoingSearch}
-                  onChange={(e) => setOutgoingSearch(e.target.value)}
-                  placeholder="Search inventory by name, number, or card id"
-                />
-              </label>
+              <input
+                type="text"
+                className="search-input"
+                value={outgoingSearch}
+                onChange={(e) => setOutgoingSearch(e.target.value)}
+                placeholder="Search inventory by name, number, or card id"
+              />
 
               {loadingOutgoingInventory && (
                 <div className="loading">Loading inventory options...</div>
@@ -677,14 +635,33 @@ export const DealTrackerPage: FC = () => {
               {!loadingOutgoingInventory && outgoingCandidates.length > 0 && (
                 <div className="deal-outgoing-list">
                   {outgoingCandidates.map((candidate) => (
-                    <div key={candidate.cardId} className="deal-item-row">
-                      <span className="deal-item-name">
-                        {candidate.itemName}
-                      </span>
-                      <span className="deal-item-price">
-                        Available: {candidate.availableQuantity} | Suggested: $
-                        {candidate.suggestedPrice.toFixed(2)}
-                      </span>
+                    <div
+                      key={candidate.cardId}
+                      className="outgoing-candidate-row"
+                    >
+                      {candidate.itemImage ? (
+                        <img
+                          src={candidate.itemImage}
+                          alt={candidate.itemName}
+                          className="outgoing-candidate-thumb"
+                        />
+                      ) : (
+                        <div className="outgoing-candidate-thumb outgoing-candidate-thumb--empty" />
+                      )}
+                      <div className="outgoing-candidate-info">
+                        <span className="outgoing-candidate-name">
+                          {candidate.itemName}
+                        </span>
+                        <span className="outgoing-candidate-meta">
+                          {candidate.itemNumber && `#${candidate.itemNumber}`}
+                          {candidate.itemNumber && candidate.setName && " · "}
+                          {candidate.setName}
+                        </span>
+                        <span className="outgoing-candidate-sub">
+                          Avail: {candidate.availableQuantity} · $
+                          {candidate.suggestedPrice.toFixed(2)}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         className="btn-secondary"
@@ -701,7 +678,7 @@ export const DealTrackerPage: FC = () => {
                           )
                         }
                       >
-                        Add to Outgoing
+                        Add
                       </button>
                     </div>
                   ))}
@@ -788,6 +765,37 @@ export const DealTrackerPage: FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="deal-summary">
+              <span className="deal-summary-title">
+                📍 {currentDeal.location || "Unspecified Location"}
+              </span>
+
+              <div className="deal-totals">
+                <div className="total-item">
+                  <span>Incoming</span>
+                  <strong>${incomingTotal.toFixed(2)}</strong>
+                </div>
+                <div className="total-item">
+                  <span>Outgoing</span>
+                  <strong>${outgoingTotal.toFixed(2)}</strong>
+                </div>
+                <div className={`total-item net-cash ${netCashClass}`}>
+                  <span>Net Cash</span>
+                  <strong>
+                    {netCash >= 0 ? "+" : ""}${netCash.toFixed(2)}
+                  </strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={finalizeDeal}
+                className="finalize-btn"
+              >
+                Finalize Deal
+              </button>
             </div>
 
             <div className="deal-item-columns">
