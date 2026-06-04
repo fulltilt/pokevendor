@@ -15,74 +15,10 @@ const toFiniteNumber = (value: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const normalizeCondition = (condition: unknown): ConditionKey | null => {
-  if (typeof condition !== "string") return null;
-  const raw = condition.trim().toLowerCase();
-  if (!raw) return null;
-  if (raw === "nm" || raw.includes("near mint")) return "nm";
-  if (
-    raw === "lp" ||
-    raw.includes("lightly played") ||
-    raw.includes("light played")
-  ) {
-    return "lp";
-  }
-  if (
-    raw === "mp" ||
-    raw.includes("moderately played") ||
-    raw.includes("moderate played")
-  ) {
-    return "mp";
-  }
-  return null;
-};
-
-const readEntryPrice = (entry: unknown): number | null => {
-  if (!entry || typeof entry !== "object") return null;
-  const e = entry as {
-    marketPrice?: unknown;
-    price?: unknown;
-    value?: unknown;
-    buckets?: Array<{ marketPrice?: unknown; price?: unknown }>;
-  };
-
-  const direct = toFiniteNumber(e.marketPrice ?? e.price ?? e.value);
-  if (direct !== null) return direct;
-
-  if (Array.isArray(e.buckets) && e.buckets.length > 0) {
-    return toFiniteNumber(e.buckets[0]?.marketPrice ?? e.buckets[0]?.price);
-  }
-
-  return null;
-};
-
-const applyResultArrayPrices = (prices: PriceMap, result: unknown): void => {
-  if (!Array.isArray(result)) return;
-
-  for (const row of result) {
-    const condition = normalizeCondition(
-      (row as { condition?: unknown } | null)?.condition,
-    );
-    if (!condition) continue;
-
-    const parsed = readEntryPrice(row);
-    if (parsed !== null) {
-      prices[condition] = parsed;
-    }
-  }
-};
-
-const applyObjectPrices = (prices: PriceMap, rawPrices: unknown): void => {
-  if (!rawPrices || typeof rawPrices !== "object") return;
-
-  const p = rawPrices as Record<string, unknown>;
-  const nm = toFiniteNumber(p.nm);
-  const lp = toFiniteNumber(p.lp);
-  const mp = toFiniteNumber(p.mp);
-
-  if (nm !== null) prices.nm = nm;
-  if (lp !== null) prices.lp = lp;
-  if (mp !== null) prices.mp = mp;
+const normalizeText = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.toLowerCase() : null;
 };
 
 const applyTopLevelPrice = (prices: PriceMap, marketPrice: unknown): void => {
@@ -93,18 +29,52 @@ const applyTopLevelPrice = (prices: PriceMap, marketPrice: unknown): void => {
   }
 };
 
+const pickBucketMarketPrice = (
+  result: unknown,
+  targetCondition: "near mint" | "lightly played" | "moderately played",
+): number | null => {
+  if (!Array.isArray(result)) return null;
+
+  const row = result.find((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    const record = entry as {
+      condition?: unknown;
+      variant?: unknown;
+      language?: unknown;
+    };
+
+    const condition = normalizeText(record.condition);
+    const variant = normalizeText(record.variant);
+    const language = normalizeText(record.language);
+
+    return (
+      condition === targetCondition &&
+      variant === "holofoil" &&
+      language === "english"
+    );
+  });
+
+  if (!row || typeof row !== "object") return null;
+  const buckets = (row as { buckets?: unknown }).buckets;
+  if (!Array.isArray(buckets) || buckets.length === 0) return null;
+
+  const firstBucket = buckets[0] as { marketPrice?: unknown } | undefined;
+  return toFiniteNumber(firstBucket?.marketPrice);
+};
+
 const parseLivePrices = (payload: unknown): PriceMap => {
   const prices = emptyPrices();
   if (!payload || typeof payload !== "object") return prices;
 
   const data = payload as {
     result?: unknown;
-    prices?: unknown;
     marketPrice?: unknown;
   };
 
-  applyResultArrayPrices(prices, data.result);
-  applyObjectPrices(prices, data.prices);
+  prices.nm = pickBucketMarketPrice(data.result, "near mint");
+  prices.lp = pickBucketMarketPrice(data.result, "lightly played");
+  prices.mp = pickBucketMarketPrice(data.result, "moderately played");
+
   applyTopLevelPrice(prices, data.marketPrice);
 
   return prices;
@@ -249,7 +219,6 @@ router.get("/:id/prices", async (req: Request, res: Response) => {
 
       const prices = parseLivePrices(priceRes.data);
       if (hasAnyPrice(prices)) {
-        console.log(`[PRICE] Returning live prices:`, prices);
         return res.json({ prices, tcgPlayerId: card.tcgPlayerId, tcgUrl });
       }
 
