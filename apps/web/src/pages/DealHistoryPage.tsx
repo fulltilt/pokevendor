@@ -199,29 +199,6 @@ export const DealHistoryPage: FC = () => {
     }
   };
 
-  const handleCreateNew = async () => {
-    try {
-      const res = await axios.post<{ deal: { id: string } }>("/api/deals", {
-        location: "",
-      });
-      // Redirect to deal tracker with the new deal (or show it in the tracker)
-      // For now, reload the deals list
-      const list = await axios.get<{ deals: DealSummary[]; total: number }>(
-        "/api/deals",
-        {
-          params: {
-            status: "active",
-            limit: 50,
-          },
-        },
-      );
-      alert("New deal created! Go to Deal Tracker to add items.");
-    } catch (error) {
-      console.error("Failed to create new deal:", error);
-      alert("Failed to create new deal");
-    }
-  };
-
   return (
     <div className="deal-history-page">
       <h1>Deal History</h1>
