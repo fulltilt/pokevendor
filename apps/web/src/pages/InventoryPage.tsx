@@ -121,21 +121,6 @@ export const InventoryPage: FC = () => {
     manualItemPlaceholder = "e.g., Charizard PSA 9";
   }
 
-  const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
-  const visibleItems = normalizedInventorySearch
-    ? items.filter((item) => {
-        const label = (item.notes || item.card?.data?.name || item.cardId)
-          .toLowerCase()
-          .trim();
-        const cardNumber = item.card?.data?.number?.toLowerCase() ?? "";
-        return (
-          label.includes(normalizedInventorySearch) ||
-          cardNumber.includes(normalizedInventorySearch) ||
-          item.cardId.toLowerCase().includes(normalizedInventorySearch)
-        );
-      })
-    : items;
-
   const closeAddModal = () => {
     setShowAddModal(false);
     setAddQuantity("1");
@@ -155,6 +140,9 @@ export const InventoryPage: FC = () => {
           filterStorageType === "all" ? {} : { storageType: filterStorageType };
         params.limit = pageSize;
         params.offset = (page - 1) * pageSize;
+        if (inventorySearch.trim()) {
+          params.q = inventorySearch.trim();
+        }
         if (sortBy) {
           params.sortBy = sortBy;
           params.sortDir = sortDir;
@@ -171,13 +159,16 @@ export const InventoryPage: FC = () => {
     };
 
     void loadInventory();
-  }, [filterStorageType, page, sortBy, sortDir]);
+  }, [filterStorageType, page, sortBy, sortDir, inventorySearch]);
 
   const reloadInventory = async () => {
     const params: Record<string, string | number> =
       filterStorageType === "all" ? {} : { storageType: filterStorageType };
     params.limit = pageSize;
     params.offset = (page - 1) * pageSize;
+    if (inventorySearch.trim()) {
+      params.q = inventorySearch.trim();
+    }
     if (sortBy) {
       params.sortBy = sortBy;
       params.sortDir = sortDir;
@@ -440,7 +431,10 @@ export const InventoryPage: FC = () => {
           type="text"
           className="search-input inventory-search-input"
           value={inventorySearch}
-          onChange={(e) => setInventorySearch(e.target.value)}
+          onChange={(e) => {
+            setInventorySearch(e.target.value);
+            setPage(1);
+          }}
           placeholder="Search inventory by name, number, or card id"
           aria-label="Search inventory"
         />
@@ -506,10 +500,8 @@ export const InventoryPage: FC = () => {
 
       {!loading && (
         <>
-          {!visibleItems.length && (
-            <div className="search-status-banner">
-              No inventory matches "{inventorySearch.trim()}".
-            </div>
+          {!items.length && (
+            <div className="search-status-banner">No inventory found.</div>
           )}
           <table className="inventory-table">
             <thead>
@@ -542,7 +534,7 @@ export const InventoryPage: FC = () => {
               </tr>
             </thead>
             <tbody>
-              {visibleItems.map((item) =>
+              {items.map((item) =>
                 (() => {
                   const priceCurrentAsk = toFiniteNumber(
                     item.priceCurrentAsk,
@@ -563,6 +555,18 @@ export const InventoryPage: FC = () => {
                       </td>
                       <td>
                         {item.notes || item.card?.data?.name || item.cardId}
+                        {(item.type ?? "card") === "card" &&
+                          item.card?.tcgPlayerId && (
+                            <a
+                              href={`https://www.tcgplayer.com/product/${item.card.tcgPlayerId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="tcgplayer-link"
+                              title="View on TCGPlayer"
+                            >
+                              TCG
+                            </a>
+                          )}
                       </td>
                       <td>{(item.type ?? "card").toUpperCase()}</td>
                       <td>{item.quantity}</td>

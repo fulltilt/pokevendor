@@ -327,6 +327,7 @@ body {
   font-size: 0.8rem;
   color: var(--accent);
   text-decoration: none;
+  margin-left: 0.4rem;
 }
 
 .tcgplayer-link:hover {

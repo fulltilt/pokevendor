@@ -146,84 +146,84 @@ router.post("/", async (req: Request, res: Response) => {
 router.get("/", async (req: Request, res: Response) => {
   try {
     const { storageType } = req.query;
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 100);
     const offset = Math.max(Number(req.query.offset ?? 0), 0);
-
-    const where: Record<string, string> = {};
-    if (storageType && typeof storageType === "string") {
-      where.storageType = storageType;
-    }
-
-    // Aggregate total value over ALL matching items (not just current page)
-    const storageFilter =
-      storageType && typeof storageType === "string" ? storageType : null;
 
     const sortBy =
       typeof req.query.sortBy === "string" ? req.query.sortBy : null;
     const sortDirRaw = req.query.sortDir === "asc" ? "asc" : "desc";
 
-    const valueAggQuery = storageFilter
-      ? prisma.$queryRaw<[{ total: number }]>`
-          SELECT COALESCE(SUM(
-            COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity
-          ), 0)::float AS total
-          FROM "InventoryItem"
-          WHERE "storageType" = ${storageFilter}
-        `
-      : prisma.$queryRaw<[{ total: number }]>`
-          SELECT COALESCE(SUM(
-            COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity
-          ), 0)::float AS total
-          FROM "InventoryItem"
-        `;
-
-    let items: Awaited<ReturnType<typeof prisma.inventoryItem.findMany>>;
-
-    if (sortBy === "totalValue") {
-      // Computed sort — get IDs in order via raw SQL, then fetch with relations
-      const sortedRows = await prisma.$queryRaw<{ id: string }[]>(
-        Prisma.sql`
-          SELECT id FROM "InventoryItem"
-          ${storageFilter ? Prisma.sql`WHERE "storageType" = ${storageFilter}` : Prisma.sql``}
-          ORDER BY (COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity)
-          ${sortDirRaw === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`}
-          LIMIT ${limit} OFFSET ${offset}
-        `,
-      );
-      const ids = sortedRows.map((r) => r.id);
-      const unordered = await prisma.inventoryItem.findMany({
-        where: { id: { in: ids } },
-        include: { card: { include: { prices: true } } },
-      });
-      const byId = new Map(unordered.map((item) => [item.id, item]));
-      items = ids.map((id) => byId.get(id)).filter(Boolean) as typeof unordered;
-    } else {
-      let orderBy: Prisma.InventoryItemOrderByWithRelationInput;
-      if (sortBy === "condition") {
-        orderBy = { condition: sortDirRaw };
-      } else if (sortBy === "priceCurrentAsk") {
-        orderBy = { priceCurrentAsk: { sort: sortDirRaw, nulls: "last" } };
-      } else {
-        orderBy = { createdAt: "desc" };
-      }
-      items = await prisma.inventoryItem.findMany({
-        where,
-        include: { card: { include: { prices: true } } },
-        take: limit,
-        skip: offset,
-        orderBy,
-      });
+    // Build WHERE clause for filtering
+    const whereConditions: string[] = [];
+    if (storageType && typeof storageType === "string") {
+      whereConditions.push(`"storageType" = '${storageType}'`);
     }
 
-    const [total, valueAgg] = await Promise.all([
-      prisma.inventoryItem.count({ where }),
-      valueAggQuery,
-    ]);
+    if (q) {
+      const qEscaped = q.replace(/'/g, "''");
+      // Search in: cardId, notes, and card name/number (via JSON data)
+      whereConditions.push(
+        `(LOWER("cardId") LIKE LOWER('%${qEscaped}%') OR LOWER(COALESCE("notes", '')) LIKE LOWER('%${qEscaped}%') OR EXISTS (SELECT 1 FROM "Card" WHERE "Card"."id" = "InventoryItem"."cardId" AND ("Card"."data"->>'name' ILIKE '%${qEscaped}%' OR "Card"."data"->>'number' ILIKE '%${qEscaped}%')))`,
+      );
+    }
 
-    const totalValue = Number(valueAgg[0]?.total ?? 0);
+    const whereClause =
+      whereConditions.length > 0
+        ? `WHERE ${whereConditions.join(" AND ")}`
+        : "";
+
+    // Get total count
+    const countResult = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+      `SELECT COUNT(*) as count FROM "InventoryItem" ${whereClause}`,
+    );
+    const total = Number(countResult[0]?.count ?? 0);
+
+    // Get total value
+    const valueResult = await prisma.$queryRawUnsafe<[{ total: number }]>(
+      `
+      SELECT COALESCE(SUM(
+        COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity
+      ), 0)::float AS total
+      FROM "InventoryItem"
+      ${whereClause}
+    `,
+    );
+    const totalValue = Number(valueResult[0]?.total ?? 0);
+
+    // Determine sort order
+    let orderClause = '"createdAt" DESC';
+    if (sortBy === "condition") {
+      orderClause = `"condition" ${sortDirRaw === "asc" ? "ASC" : "DESC"}`;
+    } else if (sortBy === "priceCurrentAsk") {
+      orderClause = `"priceCurrentAsk" ${sortDirRaw === "asc" ? "ASC" : "DESC"} NULLS LAST`;
+    } else if (sortBy === "totalValue") {
+      orderClause = `(COALESCE("priceCurrentAsk", "pricePurchasedAt") * quantity) ${sortDirRaw === "asc" ? "ASC" : "DESC"}`;
+    }
+
+    // Get items with pagination
+    const itemIds = await prisma.$queryRawUnsafe<{ id: string }[]>(
+      `
+      SELECT "id" FROM "InventoryItem"
+      ${whereClause}
+      ORDER BY ${orderClause}
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    );
+
+    const items = await prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds.map((r) => r.id) } },
+      include: { card: { include: { prices: true } } },
+    });
+
+    // Preserve order from the query
+    const itemMap = new Map(items.map((item) => [item.id, item]));
+    const orderedItems = itemIds
+      .map((r) => itemMap.get(r.id))
+      .filter(Boolean) as typeof items;
 
     res.json({
-      items,
+      items: orderedItems,
       total,
       totalValue,
       limit,
