@@ -4,6 +4,10 @@
  * Import cards from TCGDex API for specified sets
  * Usage: npx ts-node scripts/import-tcgdex-cards.ts me03 me04
  * Or with explicit set info: npx ts-node scripts/import-tcgdex-cards.ts me03:124 me04:122
+ *
+ * Note:
+ * get setId and set count from: https://api.tcgdex.net/v2/en/sets
+ *
  */
 
 import { PrismaClient } from "@prisma/client";
