@@ -132,20 +132,24 @@ router.get("/search", async (req: Request, res: Response) => {
           id,
           data,
           "tcgPlayerId",
-          COALESCE(TO_DATE(NULLIF(data #>> '{set,releaseDate}', ''), 'YYYY/MM/DD'), DATE '1900-01-01') AS release_date,
+          COALESCE(
+            TO_DATE(NULLIF(data #>> '{set,releaseDate}', ''), 'YYYY/MM/DD'),
+            TO_DATE(NULLIF(SUBSTRING(data->>'updated' FROM 1 FOR 10), ''), 'YYYY-MM-DD'),
+            DATE '1900-01-01'
+          ) AS release_date,
           CASE
-            WHEN lower(data->>'name') = lower(${searchText}) OR lower(data->>'number') = lower(${searchText}) THEN 100
-            WHEN data->>'name' ILIKE ${query} OR data->>'number' ILIKE ${query} THEN 75
-            WHEN data->>'name' ILIKE ${fuzzyQuery} OR data->>'number' ILIKE ${fuzzyQuery} THEN 50
+            WHEN lower(data->>'name') = lower(${searchText}) OR lower(COALESCE(data->>'number', data->>'localId', '')) = lower(${searchText}) THEN 100
+            WHEN data->>'name' ILIKE ${query} OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${query} THEN 75
+            WHEN data->>'name' ILIKE ${fuzzyQuery} OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${fuzzyQuery} THEN 50
             WHEN id ILIKE ${query} THEN 30
             ELSE 0
           END AS relevance_score
         FROM "Card"
         WHERE id ILIKE ${query}
            OR data->>'name' ILIKE ${query}
-           OR data->>'number' ILIKE ${query}
+           OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${query}
            OR data->>'name' ILIKE ${fuzzyQuery}
-           OR data->>'number' ILIKE ${fuzzyQuery}
+           OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${fuzzyQuery}
       )
       SELECT id, data, "tcgPlayerId"
       FROM matched
@@ -159,9 +163,9 @@ router.get("/search", async (req: Request, res: Response) => {
       FROM "Card"
       WHERE id ILIKE ${query}
          OR data->>'name' ILIKE ${query}
-         OR data->>'number' ILIKE ${query}
+          OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${query}
          OR data->>'name' ILIKE ${fuzzyQuery}
-         OR data->>'number' ILIKE ${fuzzyQuery}
+          OR COALESCE(data->>'number', data->>'localId', '') ILIKE ${fuzzyQuery}
     `) as Array<{ total: number }>;
 
     const total = totalRows[0]?.total ?? 0;

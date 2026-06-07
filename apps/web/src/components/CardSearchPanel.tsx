@@ -81,7 +81,6 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
   const [priceData, setPriceData] = useState<CardPriceData | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
   const [condition, setCondition] = useState<Condition>("nm");
-  const [tradePercentage, setTradePercentage] = useState(100);
 
   useEffect(() => {
     if (disabled || !query.trim()) {
@@ -127,7 +126,6 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
     onCardSelected?.(card);
     setPriceData(null);
     setCondition("nm");
-    setTradePercentage(100); // Reset percentage for new card
     setPriceLoading(true);
 
     try {
@@ -150,35 +148,52 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
   const selectedPrice =
     toFiniteNumber(priceData?.prices?.[condition]) ?? undefined;
 
-  const tradePrice =
-    selectedPrice != null
-      ? Number((selectedPrice * (tradePercentage / 100)).toFixed(2))
-      : undefined;
-
   let addBtnLabel = addLabel;
   if (submitting) {
     addBtnLabel = "Adding…";
-  } else if (tradePrice != null) {
-    if (tradePercentage === 100) {
-      addBtnLabel = `${addLabel} @ $${tradePrice.toFixed(2)}`;
-    } else {
-      addBtnLabel = `${addLabel} @ ${tradePercentage}% = $${tradePrice.toFixed(2)}`;
-    }
+  } else if (selectedPrice != null) {
+    addBtnLabel = `${addLabel} @ $${selectedPrice.toFixed(2)}`;
   }
 
   const handleAdd = async () => {
     if (!selectedCard) return;
     setSubmitting(true);
     try {
-      await onCardSelect(selectedCard, tradePrice);
+      await onCardSelect(selectedCard, selectedPrice);
       // Clear selection after successful add
       setSelectedCard(null);
       setPriceData(null);
-      setTradePercentage(100);
     } finally {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditableTarget =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if (isEditableTarget) {
+        return;
+      }
+
+      if (event.metaKey && event.key.toLowerCase() === "a") {
+        if (!selectedCard || submitting || disabled) {
+          return;
+        }
+
+        event.preventDefault();
+        void handleAdd();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [disabled, selectedCard, submitting, selectedPrice]);
 
   return (
     <section className="card-search-panel">
@@ -298,50 +313,6 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
                         </span>
                       )}
                     </div>
-
-                    {/* Trade Percentage Selector */}
-                    {selectedPrice != null && (
-                      <div className="trade-percentage-section">
-                        <div className="trade-percentage-label">
-                          Trade at % of market price
-                        </div>
-                        <div className="trade-percentage-presets">
-                          {[75, 80, 85, 100].map((pct) => (
-                            <button
-                              key={pct}
-                              type="button"
-                              className={`percentage-preset${tradePercentage === pct ? " active" : ""}`}
-                              onClick={() => setTradePercentage(pct)}
-                            >
-                              {pct}%
-                            </button>
-                          ))}
-                        </div>
-                        <div className="trade-percentage-custom">
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={tradePercentage}
-                            onChange={(e) => {
-                              const val = Math.max(
-                                1,
-                                Math.min(100, Number(e.target.value) || 100),
-                              );
-                              setTradePercentage(val);
-                            }}
-                            className="percentage-input"
-                          />
-                          <span className="percentage-symbol">%</span>
-                        </div>
-                        <div className="trade-calculation">
-                          ${selectedPrice.toFixed(2)} × {tradePercentage}% ={" "}
-                          <strong className="trade-price-final">
-                            ${tradePrice?.toFixed(2)}
-                          </strong>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
 
@@ -370,8 +341,9 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
                 className="btn-primary"
                 onClick={() => void handleAdd()}
                 disabled={submitting}
+                title="Add card (Command+A)"
               >
-                {addBtnLabel}
+                {addBtnLabel} {!submitting && "(⌘A)"}
               </button>
             </div>
           </div>

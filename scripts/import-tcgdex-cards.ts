@@ -20,9 +20,69 @@ interface SetConfig {
   cardCount: number;
 }
 
+interface TcgDexLikeCard {
+  localId?: unknown;
+  image?: unknown;
+  images?: unknown;
+  number?: unknown;
+  tcgPlayerId?: unknown;
+  pricing?: {
+    tcgplayer?: {
+      normal?: { productId?: unknown };
+      [key: string]: unknown;
+    };
+  };
+  set?: unknown;
+  [key: string]: unknown;
+}
+
 const prisma = new PrismaClient();
 
 const TCGDEX_API = "https://api.tcgdex.net/v2/en/cards";
+
+const toStringOrNull = (value: unknown): string | null => {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+};
+
+const deriveTcgPlayerId = (cardData: TcgDexLikeCard): string | null => {
+  const explicit = toStringOrNull(cardData.tcgPlayerId);
+  if (explicit) return explicit;
+
+  const normalProductId = toStringOrNull(
+    cardData.pricing?.tcgplayer?.normal?.productId,
+  );
+  if (normalProductId) return normalProductId;
+
+  return null;
+};
+
+const normalizeCardData = (rawCardData: TcgDexLikeCard): TcgDexLikeCard => {
+  const normalized: TcgDexLikeCard = { ...rawCardData };
+
+  const localId = toStringOrNull(rawCardData.localId);
+  const currentNumber = toStringOrNull(rawCardData.number);
+  if (!currentNumber && localId) {
+    normalized.number = localId;
+  }
+
+  const hasImagesObject =
+    !!rawCardData.images && typeof rawCardData.images === "object";
+  const imageUrl = toStringOrNull(rawCardData.image);
+  if (!hasImagesObject && imageUrl) {
+    normalized.images = {
+      small: imageUrl,
+      large: imageUrl,
+    };
+  }
+
+  return normalized;
+};
 
 /**
  * Fetch card data from TCGDex API
@@ -51,6 +111,7 @@ async function importSetCards(setId: string, cardCount: number) {
   console.log(`\n📦 Importing ${cardCount} cards for set ${setId}...`);
 
   let imported = 0;
+  let updated = 0;
   let skipped = 0;
   let failed = 0;
 
@@ -69,21 +130,43 @@ async function importSetCards(setId: string, cardCount: number) {
     }
 
     try {
+      const normalizedData = normalizeCardData(cardData as TcgDexLikeCard);
+      const normalizedTcgPlayerId = deriveTcgPlayerId(normalizedData);
+
       const existingCard = await prisma.card.findUnique({
         where: { id: cardId },
       });
 
       if (existingCard) {
-        console.log("(already exists)");
-        skipped++;
+        const shouldUpdateData =
+          JSON.stringify(existingCard.data) !== JSON.stringify(normalizedData);
+        const shouldUpdateTcg =
+          (existingCard.tcgPlayerId ?? null) !== normalizedTcgPlayerId;
+
+        if (!shouldUpdateData && !shouldUpdateTcg) {
+          console.log("(already normalized)");
+          skipped++;
+          continue;
+        }
+
+        await prisma.card.update({
+          where: { id: cardId },
+          data: {
+            data: normalizedData,
+            tcgPlayerId: normalizedTcgPlayerId,
+          },
+        });
+
+        console.log("↺ updated");
+        updated++;
         continue;
       }
 
       await prisma.card.create({
         data: {
           id: cardId,
-          data: cardData,
-          tcgPlayerId: cardData.tcgPlayerId || null,
+          data: normalizedData,
+          tcgPlayerId: normalizedTcgPlayerId,
         },
       });
 
@@ -101,7 +184,7 @@ async function importSetCards(setId: string, cardCount: number) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  return { imported, skipped, failed };
+  return { imported, updated, skipped, failed };
 }
 
 /**
@@ -151,22 +234,25 @@ async function main() {
   console.log(`📋 Sets to import: ${sets.map((s) => s.setId).join(", ")}`);
 
   let totalImported = 0;
+  let totalUpdated = 0;
   let totalSkipped = 0;
   let totalFailed = 0;
 
   try {
     for (const set of sets) {
-      const { imported, skipped, failed } = await importSetCards(
+      const { imported, updated, skipped, failed } = await importSetCards(
         set.setId,
         set.cardCount,
       );
       totalImported += imported;
+      totalUpdated += updated;
       totalSkipped += skipped;
       totalFailed += failed;
     }
 
     console.log("\n✨ Import Complete!");
     console.log(`   ✓ Imported: ${totalImported}`);
+    console.log(`   ↺ Updated: ${totalUpdated}`);
     console.log(`   ⊘ Skipped: ${totalSkipped}`);
     console.log(`   ✗ Failed: ${totalFailed}`);
   } catch (error) {

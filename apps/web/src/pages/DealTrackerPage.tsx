@@ -125,6 +125,9 @@ export const DealTrackerPage: FC = () => {
 
   const [targetNetCash, setTargetNetCash] = useState("0");
   const [isApplyingCash, setIsApplyingCash] = useState(false);
+  const [outgoingTradePercentage, setOutgoingTradePercentage] = useState(80);
+  const [isApplyingOutgoingPercentage, setIsApplyingOutgoingPercentage] =
+    useState(false);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
   const [scanPhotoName, setScanPhotoName] = useState("");
   const [scanStatus, setScanStatus] = useState(
@@ -444,6 +447,49 @@ export const DealTrackerPage: FC = () => {
     }
   };
 
+  const applyOutgoingPercentage = async () => {
+    if (!currentDeal) return;
+
+    const outgoingNonCashItems = (currentDeal.outgoing ?? []).filter(
+      (item) => item.itemType !== "cash",
+    );
+
+    if (outgoingNonCashItems.length === 0) {
+      setDealNotice("No outgoing items to apply percentage to.");
+      return;
+    }
+
+    setIsApplyingOutgoingPercentage(true);
+    setDealNotice(null);
+
+    try {
+      await Promise.all(
+        outgoingNonCashItems.map((item) => {
+          const basePrice = toFiniteNumber(item.price);
+          const adjustedPrice = Number(
+            (basePrice * (outgoingTradePercentage / 100)).toFixed(2),
+          );
+
+          return axios.patch(`/api/deals/items/${item.id}`, {
+            quantity: item.quantity,
+            price: adjustedPrice,
+            ...(item.itemType !== "card" && { notes: item.notes ?? "" }),
+          });
+        }),
+      );
+
+      await fetchDealDetails(currentDeal.id);
+      setDealNotice(
+        `Applied ${outgoingTradePercentage}% to outgoing item prices.`,
+      );
+    } catch (error) {
+      console.error("Failed to apply outgoing percentage:", error);
+      setDealNotice("Failed to apply percentage to outgoing items.");
+    } finally {
+      setIsApplyingOutgoingPercentage(false);
+    }
+  };
+
   const applyNetCashTarget = async () => {
     if (!currentDeal) return;
 
@@ -680,6 +726,9 @@ export const DealTrackerPage: FC = () => {
   const baseIncomingTotal = incomingTotal - cashIncomingTotal;
   const baseOutgoingTotal = outgoingTotal - cashOutgoingTotal;
   const baseNetCash = baseOutgoingTotal - baseIncomingTotal;
+  const projectedOutgoingTotal = Number(
+    (baseOutgoingTotal * (outgoingTradePercentage / 100)).toFixed(2),
+  );
 
   useEffect(() => {
     if (!currentDeal) {
@@ -1554,6 +1603,61 @@ export const DealTrackerPage: FC = () => {
                   aria-label={`${col === "incoming" ? "Incoming" : "Outgoing"} items`}
                 >
                   <h3>{col === "incoming" ? "Incoming" : "Outgoing"} Items</h3>
+                  {col === "outgoing" && (
+                    <div className="trade-percentage-section">
+                      <div className="trade-percentage-label">
+                        Apply % to all outgoing items
+                      </div>
+                      <div className="trade-percentage-presets">
+                        {[75, 80, 85, 100].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            className={`percentage-preset${outgoingTradePercentage === pct ? " active" : ""}`}
+                            onClick={() => setOutgoingTradePercentage(pct)}
+                            disabled={isApplyingOutgoingPercentage}
+                          >
+                            {pct}%
+                          </button>
+                        ))}
+                      </div>
+                      <div className="trade-percentage-custom">
+                        <input
+                          type="number"
+                          min="1"
+                          max="200"
+                          value={outgoingTradePercentage}
+                          onChange={(e) => {
+                            const next = Math.max(
+                              1,
+                              Math.min(200, Number(e.target.value) || 100),
+                            );
+                            setOutgoingTradePercentage(next);
+                          }}
+                          className="percentage-input"
+                          disabled={isApplyingOutgoingPercentage}
+                        />
+                        <span className="percentage-symbol">%</span>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => void applyOutgoingPercentage()}
+                          disabled={isApplyingOutgoingPercentage}
+                        >
+                          {isApplyingOutgoingPercentage
+                            ? "Applying..."
+                            : "Apply to Outgoing"}
+                        </button>
+                      </div>
+                      <div className="trade-calculation">
+                        ${baseOutgoingTotal.toFixed(2)} ×{" "}
+                        {outgoingTradePercentage}% ={" "}
+                        <strong className="trade-price-final">
+                          ${projectedOutgoingTotal.toFixed(2)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
                   {currentDeal[col].length === 0 && (
                     <div className="empty-deal-items">No items yet.</div>
                   )}
