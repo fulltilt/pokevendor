@@ -1573,24 +1573,24 @@ export const DealTrackerPage: FC = () => {
                 <div className="total-item">
                   <span>Outgoing</span>
                   <strong>${outgoingTotal.toFixed(2)}</strong>
-                  {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0 && (
-                    <span className="summary-preview-value">
-                      → $
-                      {(projectedOutgoingTotal + cashOutgoingTotal).toFixed(2)}
-                    </span>
-                  )}
                 </div>
                 <div className={`total-item net-cash ${netCashClass}`}>
-                  <span>Net Cash</span>
+                  <span>
+                    Net Cash
+                    {outgoingTradePercentage !== 100 &&
+                      baseOutgoingTotal > 0 && (
+                        <span className="net-cash-before-pct">
+                          {" "}
+                          (before {outgoingTradePercentage}%:{" "}
+                          {netCash >= 0 ? "+" : ""}${netCash.toFixed(2)})
+                        </span>
+                      )}
+                  </span>
                   <strong>
-                    {netCash >= 0 ? "+" : ""}${netCash.toFixed(2)}
+                    {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0
+                      ? `${projectedNetCash >= 0 ? "+" : ""}$${projectedNetCash.toFixed(2)}`
+                      : `${netCash >= 0 ? "+" : ""}$${netCash.toFixed(2)}`}
                   </strong>
-                  {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0 && (
-                    <span className="summary-preview-value">
-                      → {projectedNetCash >= 0 ? "+" : ""}$
-                      {projectedNetCash.toFixed(2)}
-                    </span>
-                  )}
                 </div>
               </div>
 
@@ -1639,10 +1639,10 @@ export const DealTrackerPage: FC = () => {
                   aria-label={`${col === "incoming" ? "Incoming" : "Outgoing"} items`}
                 >
                   <h3>{col === "incoming" ? "Incoming" : "Outgoing"} Items</h3>
-                  {col === "outgoing" && (
+                  {col === "incoming" && (
                     <div className="trade-percentage-section">
                       <div className="trade-percentage-label">
-                        Apply % to all outgoing items
+                        Buying at % of market price
                       </div>
                       <div className="trade-percentage-presets">
                         {[75, 80, 85, 100].map((pct) => (
@@ -1682,14 +1682,14 @@ export const DealTrackerPage: FC = () => {
                         >
                           {isApplyingOutgoingPercentage
                             ? "Applying..."
-                            : "Apply to Outgoing"}
+                            : "Apply % to Offer"}
                         </button>
                       </div>
                       <div className="trade-calculation">
-                        ${baseOutgoingTotal.toFixed(2)} ×{" "}
-                        {outgoingTradePercentage}% ={" "}
+                        Offer at {outgoingTradePercentage}% →{" "}
                         <strong className="trade-price-final">
-                          ${projectedOutgoingTotal.toFixed(2)}
+                          Net {projectedNetCash >= 0 ? "+" : ""}$
+                          {projectedNetCash.toFixed(2)}
                         </strong>
                       </div>
                     </div>
@@ -1703,7 +1703,7 @@ export const DealTrackerPage: FC = () => {
                       renderDealItemRow(
                         item,
                         false,
-                        col === "outgoing"
+                        col === "incoming"
                           ? outgoingTradePercentage
                           : undefined,
                       ),

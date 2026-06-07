@@ -1082,6 +1082,14 @@ body {
   margin-top: 0.1rem;
 }
 
+.net-cash-before-pct {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-top: 0.1rem;
+}
+
 .deal-item-row {
   display: flex;
   align-items: center;
