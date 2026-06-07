@@ -7,6 +7,13 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { config } from "dotenv";
+import { resolve } from "path";
+
+// Load .env from apps/api if DATABASE_URL not already set
+if (!process.env.DATABASE_URL) {
+  config({ path: resolve(import.meta.dirname, "../apps/api/.env") });
+}
 
 interface SetConfig {
   setId: string;
@@ -49,7 +56,7 @@ async function importSetCards(setId: string, cardCount: number) {
 
   for (let i = 1; i <= cardCount; i++) {
     const cardNumber = String(i).padStart(3, "0");
-    const cardId = `${setId}${cardNumber}`;
+    const cardId = `${setId}-${cardNumber}`;
 
     process.stdout.write(`  [${i}/${cardCount}] Fetching ${cardId}... `);
 
