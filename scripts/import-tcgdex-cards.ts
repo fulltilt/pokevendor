@@ -75,14 +75,29 @@ const normalizeCardData = (rawCardData: TcgDexLikeCard): TcgDexLikeCard => {
     normalized.number = localId;
   }
 
+  // TCGDex returns a base image URL (no extension). Append quality suffixes
+  // so the UI can use images.small and images.large directly.
   const hasImagesObject =
     !!rawCardData.images && typeof rawCardData.images === "object";
   const imageUrl = toStringOrNull(rawCardData.image);
   if (!hasImagesObject && imageUrl) {
     normalized.images = {
-      small: imageUrl,
-      large: imageUrl,
+      small: `${imageUrl}/low.webp`,
+      large: `${imageUrl}/high.webp`,
     };
+  } else if (hasImagesObject) {
+    // Already an images object — ensure URLs have quality suffixes if missing
+    const imgs = rawCardData.images as { small?: string; large?: string };
+    const needsSmallSuffix =
+      imgs.small && !imgs.small.match(/\.(webp|png|jpg|jpeg)$/i);
+    const needsLargeSuffix =
+      imgs.large && !imgs.large.match(/\.(webp|png|jpg|jpeg)$/i);
+    if (needsSmallSuffix || needsLargeSuffix) {
+      normalized.images = {
+        small: needsSmallSuffix ? `${imgs.small}/low.webp` : imgs.small,
+        large: needsLargeSuffix ? `${imgs.large}/high.webp` : imgs.large,
+      };
+    }
   }
 
   return normalized;

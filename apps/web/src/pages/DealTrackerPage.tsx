@@ -729,6 +729,8 @@ export const DealTrackerPage: FC = () => {
   const projectedOutgoingTotal = Number(
     (baseOutgoingTotal * (outgoingTradePercentage / 100)).toFixed(2),
   );
+  const projectedNetCash =
+    projectedOutgoingTotal + cashOutgoingTotal - incomingTotal;
 
   useEffect(() => {
     if (!currentDeal) {
@@ -823,67 +825,89 @@ export const DealTrackerPage: FC = () => {
     })
     .slice(0, 30);
 
-  const renderDealItemRow = (item: DealItem, isCash = false) => (
-    <div
-      key={item.id}
-      className={`deal-bucket-row${isCash ? " deal-bucket-row--cash" : ""}`}
-    >
-      {item.card?.data?.images?.small ? (
-        <img
-          src={item.card.data.images.small}
-          alt={item.card.data.name}
-          className="deal-bucket-thumb"
-        />
-      ) : (
-        <div className="deal-bucket-thumb deal-bucket-thumb--empty" />
-      )}
-      <div className="deal-bucket-info">
-        <span className="deal-bucket-name">
-          {item.notes || item.card?.data?.name || item.cardId || item.itemType}
-          {item.itemType !== "card" && (
-            <span className="item-type-badge"> [{item.itemType}]</span>
-          )}
-          {item.card?.tcgPlayerId && (
-            <a
-              href={`https://tcgplayer.com/product/${item.card.tcgPlayerId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tcgplayer-link"
-              title="View on TCGPlayer"
-            >
-              🔗
-            </a>
-          )}
-        </span>
-        {(item.card?.data?.number || item.card?.data?.set?.name) && (
-          <span className="deal-bucket-meta">
-            {item.card.data.number && `#${item.card.data.number}`}
-            {item.card.data.number && item.card.data.set?.name && " · "}
-            {item.card.data.set?.name}
-          </span>
+  const renderDealItemRow = (
+    item: DealItem,
+    isCash = false,
+    previewPercentage?: number,
+  ) => {
+    return (
+      <div
+        key={item.id}
+        className={`deal-bucket-row${isCash ? " deal-bucket-row--cash" : ""}`}
+      >
+        {item.card?.data?.images?.small ? (
+          <img
+            src={item.card.data.images.small}
+            alt={item.card.data.name}
+            className="deal-bucket-thumb"
+          />
+        ) : (
+          <div className="deal-bucket-thumb deal-bucket-thumb--empty" />
         )}
-        <span className="deal-bucket-price">
-          {item.quantity} × ${toFiniteNumber(item.price).toFixed(2)}
-        </span>
+        <div className="deal-bucket-info">
+          <span className="deal-bucket-name">
+            {item.notes ||
+              item.card?.data?.name ||
+              item.cardId ||
+              item.itemType}
+            {item.itemType !== "card" && (
+              <span className="item-type-badge"> [{item.itemType}]</span>
+            )}
+            {item.card?.tcgPlayerId && (
+              <a
+                href={`https://tcgplayer.com/product/${item.card.tcgPlayerId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tcgplayer-link"
+                title="View on TCGPlayer"
+              >
+                🔗
+              </a>
+            )}
+          </span>
+          {(item.card?.data?.number || item.card?.data?.set?.name) && (
+            <span className="deal-bucket-meta">
+              {item.card.data.number && `#${item.card.data.number}`}
+              {item.card.data.number && item.card.data.set?.name && " · "}
+              {item.card.data.set?.name}
+            </span>
+          )}
+          <span className="deal-bucket-price">
+            {item.quantity} × ${toFiniteNumber(item.price).toFixed(2)}
+            {previewPercentage != null &&
+              previewPercentage !== 100 &&
+              !isCash && (
+                <span className="deal-price-preview">
+                  {" "}
+                  → $
+                  {(
+                    toFiniteNumber(item.price) *
+                    item.quantity *
+                    (previewPercentage / 100)
+                  ).toFixed(2)}
+                </span>
+              )}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="edit-btn"
+          onClick={() => openEditDealItem(item)}
+          title="Edit item"
+        >
+          ✎
+        </button>
+        <button
+          type="button"
+          className="remove-btn"
+          onClick={() => void removeDealItem(item.id)}
+          title="Remove from deal"
+        >
+          ✕
+        </button>
       </div>
-      <button
-        type="button"
-        className="edit-btn"
-        onClick={() => openEditDealItem(item)}
-        title="Edit item"
-      >
-        ✎
-      </button>
-      <button
-        type="button"
-        className="remove-btn"
-        onClick={() => void removeDealItem(item.id)}
-        title="Remove from deal"
-      >
-        ✕
-      </button>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="deal-tracker-page">
@@ -1549,12 +1573,24 @@ export const DealTrackerPage: FC = () => {
                 <div className="total-item">
                   <span>Outgoing</span>
                   <strong>${outgoingTotal.toFixed(2)}</strong>
+                  {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0 && (
+                    <span className="summary-preview-value">
+                      → $
+                      {(projectedOutgoingTotal + cashOutgoingTotal).toFixed(2)}
+                    </span>
+                  )}
                 </div>
                 <div className={`total-item net-cash ${netCashClass}`}>
                   <span>Net Cash</span>
                   <strong>
                     {netCash >= 0 ? "+" : ""}${netCash.toFixed(2)}
                   </strong>
+                  {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0 && (
+                    <span className="summary-preview-value">
+                      → {projectedNetCash >= 0 ? "+" : ""}$
+                      {projectedNetCash.toFixed(2)}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1663,7 +1699,15 @@ export const DealTrackerPage: FC = () => {
                   )}
                   {currentDeal[col]
                     .filter((item) => item.itemType !== "cash")
-                    .map((item) => renderDealItemRow(item))}
+                    .map((item) =>
+                      renderDealItemRow(
+                        item,
+                        false,
+                        col === "outgoing"
+                          ? outgoingTradePercentage
+                          : undefined,
+                      ),
+                    )}
 
                   {currentDeal[col].some(
                     (item) => item.itemType === "cash",
