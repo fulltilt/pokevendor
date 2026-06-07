@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FC } from "react";
+import type { ChangeEvent, FC } from "react";
 import axios from "axios";
 import {
   CardSearchPanel,
@@ -57,7 +57,13 @@ export const DealTrackerPage: FC = () => {
   const [draftDeals, setDraftDeals] = useState<DraftDeal[]>([]);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
   const [currentDeal, setCurrentDeal] = useState<Deal | null>(null);
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(() => {
+    // Load last location from localStorage on mount
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lastDealLocation") || "";
+    }
+    return "";
+  });
   const [locations, setLocations] = useState<string[]>([]);
   const [incomingTotal, setIncomingTotal] = useState(0);
   const [outgoingTotal, setOutgoingTotal] = useState(0);
@@ -100,8 +106,32 @@ export const DealTrackerPage: FC = () => {
   const [manualOutgoingPrice, setManualOutgoingPrice] = useState("");
   const [isSubmittingManualOutgoing, setIsSubmittingManualOutgoing] =
     useState(false);
+
+  // Manual incoming card (by name, not from search)
+  const [showManualIncomingCard, setShowManualIncomingCard] = useState(false);
+  const [manualCardIncomingName, setManualCardIncomingName] = useState("");
+  const [manualCardIncomingQty, setManualCardIncomingQty] = useState("1");
+  const [manualCardIncomingPrice, setManualCardIncomingPrice] = useState("");
+  const [isSubmittingManualIncomingCard, setIsSubmittingManualIncomingCard] =
+    useState(false);
+
+  // Manual outgoing card (by name, not from search)
+  const [showManualOutgoingCard, setShowManualOutgoingCard] = useState(false);
+  const [manualCardOutgoingName, setManualCardOutgoingName] = useState("");
+  const [manualCardOutgoingQty, setManualCardOutgoingQty] = useState("1");
+  const [manualCardOutgoingPrice, setManualCardOutgoingPrice] = useState("");
+  const [isSubmittingManualOutgoingCard, setIsSubmittingManualOutgoingCard] =
+    useState(false);
+
   const [targetNetCash, setTargetNetCash] = useState("0");
   const [isApplyingCash, setIsApplyingCash] = useState(false);
+  const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
+  const [scanPhotoName, setScanPhotoName] = useState("");
+  const [scanStatus, setScanStatus] = useState(
+    "No photo selected. Capture a card photo to begin.",
+  );
+  const [scanCandidates, setScanCandidates] = useState<SearchCard[]>([]);
+  const [loadingScanCandidates, setLoadingScanCandidates] = useState(false);
 
   const fetchDealDetails = async (dealId: string) => {
     const response = await axios.get(`/api/deals/${dealId}`);
@@ -180,8 +210,12 @@ export const DealTrackerPage: FC = () => {
   const createNewDeal = async () => {
     try {
       const response = await axios.post("/api/deals", { location });
+      // Persist location to localStorage
+      if (typeof window !== "undefined") {
+        localStorage.setItem("lastDealLocation", location);
+      }
       await fetchDealDetails(response.data.id);
-      setLocation("");
+      // Keep location selected for next deal
       setDealNotice(
         "Deal started. Use incoming search for buys and inventory search for outgoing.",
       );
@@ -342,6 +376,56 @@ export const DealTrackerPage: FC = () => {
       setDealNotice("Failed to add item.");
     } finally {
       setIsSubmittingManualOutgoing(false);
+    }
+  };
+
+  const addManualIncomingCard = async () => {
+    if (!currentDeal || !manualCardIncomingName.trim()) return;
+    setIsSubmittingManualIncomingCard(true);
+    try {
+      await axios.post(`/api/deals/${currentDeal.id}/items`, {
+        direction: "incoming",
+        quantity: Number.parseInt(manualCardIncomingQty) || 1,
+        price: Number.parseFloat(manualCardIncomingPrice) || 0,
+        itemType: "card",
+        notes: manualCardIncomingName.trim(),
+      });
+      await fetchDealDetails(currentDeal.id);
+      setManualCardIncomingName("");
+      setManualCardIncomingQty("1");
+      setManualCardIncomingPrice("");
+      setShowManualIncomingCard(false);
+      setDealNotice(`Added card to incoming.`);
+    } catch (error) {
+      console.error("Failed to add manual incoming card:", error);
+      setDealNotice("Failed to add card.");
+    } finally {
+      setIsSubmittingManualIncomingCard(false);
+    }
+  };
+
+  const addManualOutgoingCard = async () => {
+    if (!currentDeal || !manualCardOutgoingName.trim()) return;
+    setIsSubmittingManualOutgoingCard(true);
+    try {
+      await axios.post(`/api/deals/${currentDeal.id}/items`, {
+        direction: "outgoing",
+        quantity: Number.parseInt(manualCardOutgoingQty) || 1,
+        price: Number.parseFloat(manualCardOutgoingPrice) || 0,
+        itemType: "card",
+        notes: manualCardOutgoingName.trim(),
+      });
+      await fetchDealDetails(currentDeal.id);
+      setManualCardOutgoingName("");
+      setManualCardOutgoingQty("1");
+      setManualCardOutgoingPrice("");
+      setShowManualOutgoingCard(false);
+      setDealNotice(`Added card to outgoing.`);
+    } catch (error) {
+      console.error("Failed to add manual outgoing card:", error);
+      setDealNotice("Failed to add card.");
+    } finally {
+      setIsSubmittingManualOutgoingCard(false);
     }
   };
 
@@ -506,6 +590,77 @@ export const DealTrackerPage: FC = () => {
     }
   };
 
+  const handleScanPhotoSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (scanPreviewUrl) {
+      URL.revokeObjectURL(scanPreviewUrl);
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setScanPreviewUrl(previewUrl);
+    setScanPhotoName(file.name);
+    setScanCandidates([]);
+    setScanStatus(
+      "Photo captured. Recognition lookup is a placeholder for now.",
+    );
+    setDealNotice(
+      "Photo captured. Scan lookup and auto-add are coming soon. Use search below for now.",
+    );
+  };
+
+  const clearScanPhoto = () => {
+    if (scanPreviewUrl) {
+      URL.revokeObjectURL(scanPreviewUrl);
+    }
+    setScanPreviewUrl(null);
+    setScanPhotoName("");
+    setScanCandidates([]);
+    setScanStatus("No photo selected. Capture a card photo to begin.");
+  };
+
+  const runMockScanLookup = async () => {
+    if (!scanPreviewUrl) return;
+
+    const baseName = scanPhotoName
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim();
+    const query = baseName.length >= 2 ? baseName : "pikachu";
+
+    setLoadingScanCandidates(true);
+    setScanStatus(`Running mock lookup for "${query}"...`);
+    try {
+      const response = await axios.get("/api/cards/search", {
+        params: {
+          q: query,
+          limit: 8,
+          offset: 0,
+          sortBy: "dateDesc",
+        },
+      });
+      const cards = (response.data.cards ?? []) as SearchCard[];
+      setScanCandidates(cards);
+      if (cards.length > 0) {
+        setScanStatus(`Mock matches ready (${cards.length}). Pick one to add.`);
+      } else {
+        setScanStatus("No mock matches found. Try manual search below.");
+      }
+    } catch (error) {
+      console.error("Mock scan lookup failed:", error);
+      setScanCandidates([]);
+      setScanStatus("Mock lookup failed. Use manual search below.");
+    } finally {
+      setLoadingScanCandidates(false);
+    }
+  };
+
+  const addMockCandidateToIncoming = async (card: SearchCard) => {
+    await addCardToDeal(card);
+    setDealNotice(`Added ${card.data?.name || card.id} from mock scan match.`);
+  };
+
   const netCash = outgoingTotal - incomingTotal;
   let netCashClass = "neutral";
   if (netCash > 0) {
@@ -533,6 +688,14 @@ export const DealTrackerPage: FC = () => {
     }
     setTargetNetCash(netCash.toFixed(2));
   }, [currentDeal?.id, netCash]);
+
+  useEffect(() => {
+    return () => {
+      if (scanPreviewUrl) {
+        URL.revokeObjectURL(scanPreviewUrl);
+      }
+    };
+  }, [scanPreviewUrl]);
 
   const outgoingReservedByCardId = (currentDeal?.outgoing ?? []).reduce(
     (acc, item) => {
@@ -630,6 +793,17 @@ export const DealTrackerPage: FC = () => {
           {item.notes || item.card?.data?.name || item.cardId || item.itemType}
           {item.itemType !== "card" && (
             <span className="item-type-badge"> [{item.itemType}]</span>
+          )}
+          {item.card?.tcgPlayerId && (
+            <a
+              href={`https://tcgplayer.com/product/${item.card.tcgPlayerId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tcgplayer-link"
+              title="View on TCGPlayer"
+            >
+              🔗
+            </a>
           )}
         </span>
         {(item.card?.data?.number || item.card?.data?.set?.name) && (
@@ -842,7 +1016,175 @@ export const DealTrackerPage: FC = () => {
                 </label>
               </div>
 
+              <div className="mobile-scan-panel">
+                <div className="context-panel-header">
+                  <h3>Scan Card (Camera)</h3>
+                  <p className="panel-description">
+                    Mobile-first capture flow. Recognition and auto-add are
+                    placeholders for now.
+                  </p>
+                </div>
+
+                <div className="mobile-scan-actions">
+                  <label className="btn-secondary mobile-scan-capture-btn">
+                    Take Photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="mobile-scan-file-input"
+                      onChange={handleScanPhotoSelected}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={clearScanPhoto}
+                    disabled={!scanPreviewUrl}
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {scanPreviewUrl && (
+                  <div className="mobile-scan-preview-wrap">
+                    <img
+                      src={scanPreviewUrl}
+                      alt="Card scan preview"
+                      className="mobile-scan-preview"
+                    />
+                    <span className="mobile-scan-photo-name">
+                      {scanPhotoName}
+                    </span>
+                  </div>
+                )}
+
+                <div className="mobile-scan-result">
+                  <span>{scanStatus}</span>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    disabled={!scanPreviewUrl}
+                    onClick={() => void runMockScanLookup()}
+                  >
+                    {loadingScanCandidates
+                      ? "Finding Matches..."
+                      : "Find Matches (Mock)"}
+                  </button>
+                </div>
+
+                {scanCandidates.length > 0 && (
+                  <div className="scan-candidates-list">
+                    {scanCandidates.map((candidate) => (
+                      <div key={candidate.id} className="scan-candidate-card">
+                        {candidate.data.images?.small ? (
+                          <img
+                            src={candidate.data.images.small}
+                            alt={candidate.data.name ?? candidate.id}
+                            className="scan-candidate-thumb"
+                          />
+                        ) : (
+                          <div className="scan-candidate-thumb scan-candidate-thumb--empty" />
+                        )}
+                        <div className="scan-candidate-info">
+                          <span className="scan-candidate-name">
+                            {candidate.data.name ?? candidate.id}
+                          </span>
+                          <span className="scan-candidate-meta">
+                            {candidate.data.number
+                              ? `#${candidate.data.number}`
+                              : ""}
+                            {candidate.data.number && candidate.data.set?.name
+                              ? " · "
+                              : ""}
+                            {candidate.data.set?.name ?? ""}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() =>
+                            void addMockCandidateToIncoming(candidate)
+                          }
+                        >
+                          Add to Incoming
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <CardSearchPanel title="" onCardSelect={addCardToDeal} />
+
+              <div className="manual-entry-section">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    setShowManualIncomingCard(!showManualIncomingCard)
+                  }
+                >
+                  {showManualIncomingCard ? "▲ Cancel" : "+ Add Card Manually"}
+                </button>
+
+                {showManualIncomingCard && (
+                  <div className="manual-entry-form">
+                    <div className="context-form-grid">
+                      <label className="field-group field-group-wide">
+                        <span>Card Name / Description</span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Charizard EX PSA 8"
+                          value={manualCardIncomingName}
+                          onChange={(e) =>
+                            setManualCardIncomingName(e.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="field-group">
+                        <span>Quantity</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={manualCardIncomingQty}
+                          onChange={(e) =>
+                            setManualCardIncomingQty(e.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="field-group">
+                        <span>Price</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualCardIncomingPrice}
+                          onChange={(e) =>
+                            setManualCardIncomingPrice(e.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={
+                        !manualCardIncomingName.trim() ||
+                        isSubmittingManualIncomingCard
+                      }
+                      onClick={() => void addManualIncomingCard()}
+                    >
+                      {isSubmittingManualIncomingCard
+                        ? "Adding..."
+                        : "Add to Incoming"}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="manual-entry-section">
                 <button
@@ -995,6 +1337,77 @@ export const DealTrackerPage: FC = () => {
                   ))}
                 </div>
               )}
+
+              <div className="manual-entry-section">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() =>
+                    setShowManualOutgoingCard(!showManualOutgoingCard)
+                  }
+                >
+                  {showManualOutgoingCard
+                    ? "▲ Cancel"
+                    : "+ Add Card Manually to Outgoing"}
+                </button>
+
+                {showManualOutgoingCard && (
+                  <div className="manual-entry-form">
+                    <div className="context-form-grid">
+                      <label className="field-group field-group-wide">
+                        <span>Card Name / Description</span>
+                        <input
+                          type="text"
+                          placeholder="e.g. Blastoise PSA 9"
+                          value={manualCardOutgoingName}
+                          onChange={(e) =>
+                            setManualCardOutgoingName(e.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="field-group">
+                        <span>Quantity</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={manualCardOutgoingQty}
+                          onChange={(e) =>
+                            setManualCardOutgoingQty(e.target.value)
+                          }
+                        />
+                      </label>
+
+                      <label className="field-group">
+                        <span>Price</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualCardOutgoingPrice}
+                          onChange={(e) =>
+                            setManualCardOutgoingPrice(e.target.value)
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={
+                        !manualCardOutgoingName.trim() ||
+                        isSubmittingManualOutgoingCard
+                      }
+                      onClick={() => void addManualOutgoingCard()}
+                    >
+                      {isSubmittingManualOutgoingCard
+                        ? "Adding..."
+                        : "Add to Outgoing"}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="manual-entry-section">
                 <button

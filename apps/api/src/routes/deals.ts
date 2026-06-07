@@ -185,6 +185,7 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
         quantity,
         price,
         itemType,
+        notes: notes || null,
       },
     });
 
@@ -194,11 +195,42 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
   }
 });
 
-// Deal analytics grouped by location (must be before /:dealId)
-router.get("/analytics", async (_req: Request, res: Response) => {
+// Deal analytics grouped by location with optional filters (must be before /:dealId)
+router.get("/analytics", async (req: Request, res: Response) => {
   try {
+    const { location, dateFrom, dateTo } = req.query;
+
+    const where: Prisma.DealWhereInput = { status: "finalized" };
+
+    // Filter by location
+    if (typeof location === "string" && location.trim()) {
+      where.location = { equals: location.trim() };
+    }
+
+    // Filter by date range
+    if (typeof dateFrom === "string" && dateFrom.trim()) {
+      if (!where.dateFinalized) {
+        where.dateFinalized = {};
+      }
+      where.dateFinalized = {
+        ...(where.dateFinalized as any),
+        gte: new Date(dateFrom),
+      };
+    }
+    if (typeof dateTo === "string" && dateTo.trim()) {
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      if (!where.dateFinalized) {
+        where.dateFinalized = {};
+      }
+      where.dateFinalized = {
+        ...(where.dateFinalized as any),
+        lte: endDate,
+      };
+    }
+
     const deals = await prisma.deal.findMany({
-      where: { status: "finalized" },
+      where,
       include: { items: true },
       orderBy: { dateFinalized: "desc" },
     });
@@ -259,6 +291,116 @@ router.get("/analytics", async (_req: Request, res: Response) => {
     res.json({ analytics, totalDeals: deals.length });
   } catch {
     res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
+// Deal analytics grouped by time (month/year) with optional filters
+router.get("/analytics/time", async (req: Request, res: Response) => {
+  try {
+    const { location, dateFrom, dateTo, groupBy } = req.query;
+    const groupByVal = (typeof groupBy === "string" ? groupBy : "month") as
+      | "month"
+      | "year";
+
+    const where: Prisma.DealWhereInput = { status: "finalized" };
+
+    // Filter by location
+    if (typeof location === "string" && location.trim()) {
+      where.location = { equals: location.trim() };
+    }
+
+    // Filter by date range
+    if (typeof dateFrom === "string" && dateFrom.trim()) {
+      if (!where.dateFinalized) {
+        where.dateFinalized = {};
+      }
+      where.dateFinalized = {
+        ...(where.dateFinalized as any),
+        gte: new Date(dateFrom),
+      };
+    }
+    if (typeof dateTo === "string" && dateTo.trim()) {
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      if (!where.dateFinalized) {
+        where.dateFinalized = {};
+      }
+      where.dateFinalized = {
+        ...(where.dateFinalized as any),
+        lte: endDate,
+      };
+    }
+
+    const deals = await prisma.deal.findMany({
+      where,
+      include: { items: true },
+      orderBy: { dateFinalized: "asc" },
+    });
+
+    const timeMap = new Map<
+      string,
+      {
+        period: string;
+        year: number;
+        month?: number;
+        dealCount: number;
+        totalIncoming: number;
+        totalOutgoing: number;
+      }
+    >();
+
+    for (const deal of deals) {
+      if (!deal.dateFinalized) continue;
+
+      const date = deal.dateFinalized;
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+
+      const periodKey =
+        groupByVal === "year"
+          ? `${year}`
+          : `${year}-${String(month).padStart(2, "0")}`;
+      const period =
+        groupByVal === "year"
+          ? `${year}`
+          : `${year}-${String(month).padStart(2, "0")}`;
+
+      const incomingTotal = deal.items
+        .filter((i) => i.direction === "incoming")
+        .reduce((s, i) => s + i.price * i.quantity, 0);
+      const outgoingTotal = deal.items
+        .filter((i) => i.direction === "outgoing")
+        .reduce((s, i) => s + i.price * i.quantity, 0);
+
+      const existing = timeMap.get(periodKey);
+      if (existing) {
+        existing.dealCount += 1;
+        existing.totalIncoming += incomingTotal;
+        existing.totalOutgoing += outgoingTotal;
+      } else {
+        timeMap.set(periodKey, {
+          period,
+          year,
+          ...(groupByVal === "month" && { month }),
+          dealCount: 1,
+          totalIncoming: incomingTotal,
+          totalOutgoing: outgoingTotal,
+        });
+      }
+    }
+
+    const analytics = Array.from(timeMap.values())
+      .map((entry) => ({
+        ...entry,
+        totalNetCash: entry.totalOutgoing - entry.totalIncoming,
+        avgNetCash:
+          (entry.totalOutgoing - entry.totalIncoming) / entry.dealCount,
+      }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    res.json({ analytics, totalDeals: deals.length });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch time analytics" });
   }
 });
 

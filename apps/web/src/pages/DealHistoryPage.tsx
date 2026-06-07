@@ -3,7 +3,8 @@ import type { FC } from "react";
 import axios from "axios";
 
 type SortBy = "dateDesc" | "dateAsc" | "location";
-type View = "deals" | "analytics";
+type View = "deals" | "showAnalytics" | "timeAnalytics";
+type GroupBy = "month" | "year";
 
 interface DealCardData {
   name?: string;
@@ -45,6 +46,17 @@ interface LocationAnalytic {
   lastDealDate?: string | null;
 }
 
+interface TimeAnalytic {
+  period: string;
+  year: number;
+  month?: number;
+  dealCount: number;
+  totalIncoming: number;
+  totalOutgoing: number;
+  totalNetCash: number;
+  avgNetCash: number;
+}
+
 const fmt = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 
 const fmtSigned = (n: number) =>
@@ -70,12 +82,24 @@ export const DealHistoryPage: FC = () => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [allLocations, setAllLocations] = useState<string[]>([]);
   const pageSize = 25;
 
-  // --- Analytics state ---
-  const [analytics, setAnalytics] = useState<LocationAnalytic[]>([]);
-  const [totalDeals, setTotalDeals] = useState(0);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  // --- Analytics filter state ---
+  const [filterLocation, setFilterLocation] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [groupBy, setGroupBy] = useState<GroupBy>("month");
+
+  // --- Location Analytics state ---
+  const [showAnalytics, setShowAnalytics] = useState<LocationAnalytic[]>([]);
+  const [showAnalyticsTotal, setShowAnalyticsTotal] = useState(0);
+  const [showAnalyticsLoading, setShowAnalyticsLoading] = useState(false);
+
+  // --- Time Analytics state ---
+  const [timeAnalytics, setTimeAnalytics] = useState<TimeAnalytic[]>([]);
+  const [timeAnalyticsTotal, setTimeAnalyticsTotal] = useState(0);
+  const [timeAnalyticsLoading, setTimeAnalyticsLoading] = useState(false);
 
   // --- CRUD modals state ---
   const [editingDeal, setEditingDeal] = useState<DealSummary | null>(null);
@@ -102,6 +126,27 @@ export const DealHistoryPage: FC = () => {
         );
         setDeals(res.data.deals ?? []);
         setTotal(res.data.total ?? 0);
+
+        // Extract all unique locations for filter dropdown
+        if (page === 1) {
+          const allDealsRes = await axios.get<{
+            deals: DealSummary[];
+            total: number;
+          }>("/api/deals", {
+            params: {
+              status: "finalized",
+              limit: 1000,
+            },
+          });
+          const uniqueLocs = Array.from(
+            new Set(
+              allDealsRes.data.deals
+                .map((d) => d.location)
+                .filter((loc) => loc && loc.trim()),
+            ),
+          ).sort() as string[];
+          setAllLocations(uniqueLocs);
+        }
       } catch (error) {
         console.error("Failed to fetch deal history:", error);
       } finally {
@@ -111,28 +156,70 @@ export const DealHistoryPage: FC = () => {
     void load();
   }, [q, sortBy, page]);
 
+  // --- Fetch Show (Location) Analytics ---
   useEffect(() => {
-    if (view !== "analytics") return;
+    if (view !== "showAnalytics") return;
     const load = async () => {
-      setAnalyticsLoading(true);
+      setShowAnalyticsLoading(true);
       try {
         const res = await axios.get<{
           analytics: LocationAnalytic[];
           totalDeals: number;
-        }>("/api/deals/analytics");
-        setAnalytics(res.data.analytics ?? []);
-        setTotalDeals(res.data.totalDeals ?? 0);
+        }>("/api/deals/analytics", {
+          params: {
+            ...(filterLocation && { location: filterLocation }),
+            ...(filterDateFrom && { dateFrom: filterDateFrom }),
+            ...(filterDateTo && { dateTo: filterDateTo }),
+          },
+        });
+        setShowAnalytics(res.data.analytics ?? []);
+        setShowAnalyticsTotal(res.data.totalDeals ?? 0);
       } catch (error) {
-        console.error("Failed to fetch analytics:", error);
+        console.error("Failed to fetch show analytics:", error);
       } finally {
-        setAnalyticsLoading(false);
+        setShowAnalyticsLoading(false);
       }
     };
     void load();
-  }, [view]);
+  }, [view, filterLocation, filterDateFrom, filterDateTo]);
+
+  // --- Fetch Time Analytics ---
+  useEffect(() => {
+    if (view !== "timeAnalytics") return;
+    const load = async () => {
+      setTimeAnalyticsLoading(true);
+      try {
+        const res = await axios.get<{
+          analytics: TimeAnalytic[];
+          totalDeals: number;
+        }>("/api/deals/analytics/time", {
+          params: {
+            groupBy,
+            ...(filterLocation && { location: filterLocation }),
+            ...(filterDateFrom && { dateFrom: filterDateFrom }),
+            ...(filterDateTo && { dateTo: filterDateTo }),
+          },
+        });
+        setTimeAnalytics(res.data.analytics ?? []);
+        setTimeAnalyticsTotal(res.data.totalDeals ?? 0);
+      } catch (error) {
+        console.error("Failed to fetch time analytics:", error);
+      } finally {
+        setTimeAnalyticsLoading(false);
+      }
+    };
+    void load();
+  }, [view, groupBy, filterLocation, filterDateFrom, filterDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const grandNetCash = analytics.reduce((s, a) => s + a.totalNetCash, 0);
+  const grandShowNetCash = showAnalytics.reduce(
+    (s, a) => s + a.totalNetCash,
+    0,
+  );
+  const grandTimeNetCash = timeAnalytics.reduce(
+    (s, a) => s + a.totalNetCash,
+    0,
+  );
 
   // --- CRUD Handlers ---
   const handleEditOpen = (deal: DealSummary) => {
@@ -213,12 +300,66 @@ export const DealHistoryPage: FC = () => {
         </button>
         <button
           type="button"
-          className={`nav-btn${view === "analytics" ? " active" : ""}`}
-          onClick={() => setView("analytics")}
+          className={`nav-btn${view === "showAnalytics" ? " active" : ""}`}
+          onClick={() => setView("showAnalytics")}
         >
-          Location Analytics
+          Show Analytics
+        </button>
+        <button
+          type="button"
+          className={`nav-btn${view === "timeAnalytics" ? " active" : ""}`}
+          onClick={() => setView("timeAnalytics")}
+        >
+          Time Analytics
         </button>
       </div>
+
+      {/* ---- ANALYTICS FILTERS (shown on analytics views) ---- */}
+      {(view === "showAnalytics" || view === "timeAnalytics") && (
+        <div className="analytics-filter-controls">
+          <select
+            className="filter-select"
+            value={filterLocation}
+            onChange={(e) => setFilterLocation(e.target.value)}
+          >
+            <option value="">All Shows</option>
+            {allLocations.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            className="filter-date"
+            placeholder="From"
+            value={filterDateFrom}
+            onChange={(e) => setFilterDateFrom(e.target.value)}
+          />
+          <input
+            type="date"
+            className="filter-date"
+            placeholder="To"
+            value={filterDateTo}
+            onChange={(e) => setFilterDateTo(e.target.value)}
+          />
+
+          {(filterLocation || filterDateFrom || filterDateTo) && (
+            <button
+              type="button"
+              className="filter-reset-btn"
+              onClick={() => {
+                setFilterLocation("");
+                setFilterDateFrom("");
+                setFilterDateTo("");
+              }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ---- DEALS VIEW ---- */}
       {view === "deals" && (
@@ -429,38 +570,40 @@ export const DealHistoryPage: FC = () => {
         </>
       )}
 
-      {/* ---- ANALYTICS VIEW ---- */}
-      {view === "analytics" && (
+      {/* ---- SHOW ANALYTICS VIEW ---- */}
+      {view === "showAnalytics" && (
         <>
-          {analyticsLoading && (
-            <div className="loading">Loading analytics…</div>
+          {showAnalyticsLoading && (
+            <div className="loading">Loading show analytics…</div>
           )}
 
-          {!analyticsLoading && analytics.length === 0 && (
-            <div className="search-status-banner">No finalized deals yet.</div>
+          {!showAnalyticsLoading && showAnalytics.length === 0 && (
+            <div className="search-status-banner">
+              No finalized deals found.
+            </div>
           )}
 
-          {!analyticsLoading && analytics.length > 0 && (
+          {!showAnalyticsLoading && showAnalytics.length > 0 && (
             <>
               <div className="analytics-summary">
                 <div className="total-item">
                   <span>Total Deals</span>
-                  <strong>{totalDeals}</strong>
+                  <strong>{showAnalyticsTotal}</strong>
                 </div>
                 <div className="total-item">
-                  <span>Locations</span>
-                  <strong>{analytics.length}</strong>
+                  <span>Shows</span>
+                  <strong>{showAnalytics.length}</strong>
                 </div>
-                <div className={`total-item ${netClass(grandNetCash)}`}>
+                <div className={`total-item ${netClass(grandShowNetCash)}`}>
                   <span>Overall Net Cash</span>
-                  <strong>{fmtSigned(grandNetCash)}</strong>
+                  <strong>{fmtSigned(grandShowNetCash)}</strong>
                 </div>
               </div>
 
               <table className="deal-history-table">
                 <thead>
                   <tr>
-                    <th>Location</th>
+                    <th>Show / Location</th>
                     <th>Deals</th>
                     <th>Last Deal</th>
                     <th>Total Incoming</th>
@@ -470,7 +613,7 @@ export const DealHistoryPage: FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {analytics.map((loc) => (
+                  {showAnalytics.map((loc) => (
                     <tr key={loc.location} className="deal-history-row">
                       <td>
                         <strong>{loc.location}</strong>
@@ -486,6 +629,92 @@ export const DealHistoryPage: FC = () => {
                       </td>
                       <td className={netClass(loc.avgNetCash)}>
                         {fmtSigned(loc.avgNetCash)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </>
+      )}
+
+      {/* ---- TIME ANALYTICS VIEW ---- */}
+      {view === "timeAnalytics" && (
+        <>
+          {timeAnalyticsLoading && (
+            <div className="loading">Loading time analytics…</div>
+          )}
+
+          {!timeAnalyticsLoading && timeAnalytics.length === 0 && (
+            <div className="search-status-banner">
+              No finalized deals found.
+            </div>
+          )}
+
+          {!timeAnalyticsLoading && timeAnalytics.length > 0 && (
+            <>
+              <div className="analytics-summary">
+                <div className="total-item">
+                  <span>Total Deals</span>
+                  <strong>{timeAnalyticsTotal}</strong>
+                </div>
+                <div className="total-item">
+                  <span>Periods</span>
+                  <strong>{timeAnalytics.length}</strong>
+                </div>
+                <div className={`total-item ${netClass(grandTimeNetCash)}`}>
+                  <span>Overall Net Cash</span>
+                  <strong>{fmtSigned(grandTimeNetCash)}</strong>
+                </div>
+              </div>
+
+              <div className="time-analytics-controls">
+                <label>
+                  <input
+                    type="radio"
+                    value="month"
+                    checked={groupBy === "month"}
+                    onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  />
+                  By Month
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    value="year"
+                    checked={groupBy === "year"}
+                    onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  />
+                  By Year
+                </label>
+              </div>
+
+              <table className="deal-history-table">
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th>Deals</th>
+                    <th>Total Incoming</th>
+                    <th>Total Outgoing</th>
+                    <th>Net Cash</th>
+                    <th>Avg Net / Deal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeAnalytics.map((entry) => (
+                    <tr key={entry.period} className="deal-history-row">
+                      <td>
+                        <strong>{entry.period}</strong>
+                      </td>
+                      <td>{entry.dealCount}</td>
+                      <td>{fmt(entry.totalIncoming)}</td>
+                      <td>{fmt(entry.totalOutgoing)}</td>
+                      <td className={netClass(entry.totalNetCash)}>
+                        {fmtSigned(entry.totalNetCash)}
+                      </td>
+                      <td className={netClass(entry.avgNetCash)}>
+                        {fmtSigned(entry.avgNetCash)}
                       </td>
                     </tr>
                   ))}
