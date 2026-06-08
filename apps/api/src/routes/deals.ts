@@ -412,7 +412,10 @@ router.get("/:dealId", async (req: Request, res: Response) => {
     const deal = await prisma.deal.findUnique({
       where: { id: dealId },
       include: {
-        items: { include: { card: true } },
+        items: {
+          include: { card: true },
+          orderBy: { id: "asc" },
+        },
       },
     });
 

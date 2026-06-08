@@ -450,12 +450,12 @@ export const DealTrackerPage: FC = () => {
   const applyOutgoingPercentage = async () => {
     if (!currentDeal) return;
 
-    const outgoingNonCashItems = (currentDeal.outgoing ?? []).filter(
+    const incomingNonCashItems = (currentDeal.incoming ?? []).filter(
       (item) => item.itemType !== "cash",
     );
 
-    if (outgoingNonCashItems.length === 0) {
-      setDealNotice("No outgoing items to apply percentage to.");
+    if (incomingNonCashItems.length === 0) {
+      setDealNotice("No incoming items to apply percentage to.");
       return;
     }
 
@@ -464,7 +464,7 @@ export const DealTrackerPage: FC = () => {
 
     try {
       await Promise.all(
-        outgoingNonCashItems.map((item) => {
+        incomingNonCashItems.map((item) => {
           const basePrice = toFiniteNumber(item.price);
           const adjustedPrice = Number(
             (basePrice * (outgoingTradePercentage / 100)).toFixed(2),
@@ -480,11 +480,11 @@ export const DealTrackerPage: FC = () => {
 
       await fetchDealDetails(currentDeal.id);
       setDealNotice(
-        `Applied ${outgoingTradePercentage}% to outgoing item prices.`,
+        `Applied ${outgoingTradePercentage}% to incoming item prices.`,
       );
     } catch (error) {
       console.error("Failed to apply outgoing percentage:", error);
-      setDealNotice("Failed to apply percentage to outgoing items.");
+      setDealNotice("Failed to apply percentage to incoming items.");
     } finally {
       setIsApplyingOutgoingPercentage(false);
     }
@@ -726,19 +726,28 @@ export const DealTrackerPage: FC = () => {
   const baseIncomingTotal = incomingTotal - cashIncomingTotal;
   const baseOutgoingTotal = outgoingTotal - cashOutgoingTotal;
   const baseNetCash = baseOutgoingTotal - baseIncomingTotal;
-  const projectedOutgoingTotal = Number(
-    (baseOutgoingTotal * (outgoingTradePercentage / 100)).toFixed(2),
+  const projectedIncomingTotal = Number(
+    (baseIncomingTotal * (outgoingTradePercentage / 100)).toFixed(2),
   );
+  const projectedBaseNetCash = baseOutgoingTotal - projectedIncomingTotal;
   const projectedNetCash =
-    projectedOutgoingTotal + cashOutgoingTotal - incomingTotal;
+    outgoingTotal - (projectedIncomingTotal + cashIncomingTotal);
+  const activeBaseNetCash =
+    outgoingTradePercentage !== 100 && baseIncomingTotal > 0
+      ? projectedBaseNetCash
+      : baseNetCash;
+  const activeNetCash =
+    outgoingTradePercentage !== 100 && baseIncomingTotal > 0
+      ? projectedNetCash
+      : netCash;
 
   useEffect(() => {
     if (!currentDeal) {
       setTargetNetCash("0");
       return;
     }
-    setTargetNetCash(netCash.toFixed(2));
-  }, [currentDeal?.id, netCash]);
+    setTargetNetCash(activeNetCash.toFixed(2));
+  }, [activeNetCash, currentDeal?.id]);
 
   useEffect(() => {
     return () => {
@@ -1578,7 +1587,7 @@ export const DealTrackerPage: FC = () => {
                   <span>
                     Net Cash
                     {outgoingTradePercentage !== 100 &&
-                      baseOutgoingTotal > 0 && (
+                      baseIncomingTotal > 0 && (
                         <span className="net-cash-before-pct">
                           {" "}
                           (before {outgoingTradePercentage}%:{" "}
@@ -1587,8 +1596,8 @@ export const DealTrackerPage: FC = () => {
                       )}
                   </span>
                   <strong>
-                    {outgoingTradePercentage !== 100 && baseOutgoingTotal > 0
-                      ? `${projectedNetCash >= 0 ? "+" : ""}$${projectedNetCash.toFixed(2)}`
+                    {outgoingTradePercentage !== 100 && baseIncomingTotal > 0
+                      ? `${activeNetCash >= 0 ? "+" : ""}$${activeNetCash.toFixed(2)}`
                       : `${netCash >= 0 ? "+" : ""}$${netCash.toFixed(2)}`}
                   </strong>
                 </div>
@@ -1596,7 +1605,17 @@ export const DealTrackerPage: FC = () => {
 
               <div className="cash-adjustment-controls">
                 <div className="cash-adjustment-meta">
-                  <span>Base Net (No Cash): ${baseNetCash.toFixed(2)}</span>
+                  <span>
+                    Base Net (No Cash): ${activeBaseNetCash.toFixed(2)}
+                    {outgoingTradePercentage !== 100 &&
+                      baseIncomingTotal > 0 && (
+                        <span className="net-cash-before-pct">
+                          {" "}
+                          (before {outgoingTradePercentage}%: $
+                          {baseNetCash.toFixed(2)})
+                        </span>
+                      )}
+                  </span>
                   <span>
                     Cash Adjustment: {cashAdjustment >= 0 ? "+" : ""}$
                     {cashAdjustment.toFixed(2)}
@@ -1688,8 +1707,8 @@ export const DealTrackerPage: FC = () => {
                       <div className="trade-calculation">
                         Offer at {outgoingTradePercentage}% →{" "}
                         <strong className="trade-price-final">
-                          Net {projectedNetCash >= 0 ? "+" : ""}$
-                          {projectedNetCash.toFixed(2)}
+                          Net {activeNetCash >= 0 ? "+" : ""}$
+                          {activeNetCash.toFixed(2)}
                         </strong>
                       </div>
                     </div>
