@@ -147,7 +147,7 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const { storageType } = req.query;
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-    const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 100);
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 50), 1), 2000);
     const offset = Math.max(Number(req.query.offset ?? 0), 0);
 
     const sortBy =
