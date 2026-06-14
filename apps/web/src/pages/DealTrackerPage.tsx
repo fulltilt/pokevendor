@@ -499,6 +499,22 @@ export const DealTrackerPage: FC = () => {
       return;
     }
 
+    const currentIncomingTotal = (currentDeal.incoming ?? []).reduce(
+      (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
+      0,
+    );
+    const currentOutgoingTotal = (currentDeal.outgoing ?? []).reduce(
+      (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
+      0,
+    );
+    const currentNetCash = currentOutgoingTotal - currentIncomingTotal;
+    const neededDelta = parsedTarget - currentNetCash;
+
+    if (Math.abs(neededDelta) < 0.005) {
+      setDealNotice("Net cash is already at the target amount.");
+      return;
+    }
+
     const cashIncomingItems = (currentDeal.incoming ?? []).filter(
       (item) => item.itemType === "cash",
     );
@@ -506,21 +522,19 @@ export const DealTrackerPage: FC = () => {
       (item) => item.itemType === "cash",
     );
 
-    const nonCashIncomingTotal = (currentDeal.incoming ?? [])
-      .filter((item) => item.itemType !== "cash")
-      .reduce(
-        (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
-        0,
-      );
-    const nonCashOutgoingTotal = (currentDeal.outgoing ?? [])
-      .filter((item) => item.itemType !== "cash")
-      .reduce(
-        (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
-        0,
-      );
-
-    const baseNetCash = nonCashOutgoingTotal - nonCashIncomingTotal;
-    const neededCashAdjustment = parsedTarget - baseNetCash;
+    const currentCashIncomingTotal = cashIncomingItems.reduce(
+      (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
+      0,
+    );
+    const currentCashOutgoingTotal = cashOutgoingItems.reduce(
+      (sum, item) => sum + toFiniteNumber(item.price) * item.quantity,
+      0,
+    );
+    const currentCashAdjustment =
+      currentCashOutgoingTotal - currentCashIncomingTotal;
+    const nextCashAdjustment = Number(
+      (currentCashAdjustment + neededDelta).toFixed(2),
+    );
 
     const deleteAllCashItems = async () => {
       const allCashItems = [...cashIncomingItems, ...cashOutgoingItems];
@@ -532,10 +546,10 @@ export const DealTrackerPage: FC = () => {
     setIsApplyingCash(true);
     setDealNotice(null);
     try {
-      if (Math.abs(neededCashAdjustment) < 0.005) {
+      if (Math.abs(nextCashAdjustment) < 0.005) {
         await deleteAllCashItems();
-      } else if (neededCashAdjustment > 0) {
-        const amount = Number(neededCashAdjustment.toFixed(2));
+      } else if (nextCashAdjustment > 0) {
+        const amount = Number(nextCashAdjustment.toFixed(2));
 
         if (cashOutgoingItems.length > 0) {
           await axios.patch(`/api/deals/items/${cashOutgoingItems[0].id}`, {
@@ -566,7 +580,7 @@ export const DealTrackerPage: FC = () => {
           ),
         );
       } else {
-        const amount = Number(Math.abs(neededCashAdjustment).toFixed(2));
+        const amount = Number(Math.abs(nextCashAdjustment).toFixed(2));
 
         if (cashIncomingItems.length > 0) {
           await axios.patch(`/api/deals/items/${cashIncomingItems[0].id}`, {
@@ -599,7 +613,9 @@ export const DealTrackerPage: FC = () => {
       }
 
       await fetchDealDetails(currentDeal.id);
-      setDealNotice("Net cash updated using cash adjustment.");
+      setDealNotice(
+        `Applied ${neededDelta >= 0 ? "+" : ""}${neededDelta.toFixed(2)} via cash adjustment.`,
+      );
     } catch (error) {
       console.error("Failed to apply net cash target:", error);
       setDealNotice("Failed to update net cash.");
@@ -1636,7 +1652,7 @@ export const DealTrackerPage: FC = () => {
                     onClick={() => void applyNetCashTarget()}
                     disabled={isApplyingCash}
                   >
-                    {isApplyingCash ? "Applying..." : "Apply Cash"}
+                    {isApplyingCash ? "Applying..." : "Apply Target"}
                   </button>
                 </div>
               </div>

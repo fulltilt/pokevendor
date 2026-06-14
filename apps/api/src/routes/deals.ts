@@ -452,11 +452,11 @@ router.get("/:dealId", async (req: Request, res: Response) => {
   }
 });
 
-// Update deal item (quantity, price, direction)
+// Update deal item (quantity, price, direction, itemType, notes)
 router.patch("/items/:itemId", async (req: Request, res: Response) => {
   try {
     const { itemId } = req.params;
-    const { quantity, price, direction, notes } = req.body;
+    const { quantity, price, direction, itemType, notes } = req.body;
 
     if (
       direction !== undefined &&
@@ -473,6 +473,7 @@ router.patch("/items/:itemId", async (req: Request, res: Response) => {
         ...(quantity !== undefined && { quantity }),
         ...(price !== undefined && { price }),
         ...(direction !== undefined && { direction }),
+        ...(itemType !== undefined && { itemType }),
         ...(notes !== undefined && { notes }),
       },
     });

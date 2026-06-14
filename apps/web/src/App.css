@@ -1950,7 +1950,15 @@ body {
   color: var(--text-primary);
 }
 
+.deal-edit-items-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
 .modal-body .form-group input,
+.modal-body .form-group select,
 .modal-body .form-group textarea {
   width: 100%;
   padding: 0.5rem 0.75rem;
@@ -1963,10 +1971,54 @@ body {
 }
 
 .modal-body .form-group input:focus,
+.modal-body .form-group select:focus,
 .modal-body .form-group textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.edit-item-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.edit-item-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.edit-item-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.8fr) repeat(5, minmax(80px, 1fr)) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.edit-item-row input,
+.edit-item-row select {
+  min-width: 0;
+}
+
+.edit-item-label {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1100px) {
+  .edit-item-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .edit-item-label {
+    grid-column: 1 / -1;
+  }
 }
 
 .deal-summary-box {

@@ -36,6 +36,17 @@ interface DealSummary {
   outgoing: DealItemDetail[];
 }
 
+interface EditableDealItem {
+  id: string;
+  direction: "incoming" | "outgoing";
+  quantity: string;
+  price: string;
+  itemType: string;
+  notes: string;
+  label: string;
+  isNew?: boolean;
+}
+
 interface LocationAnalytic {
   location: string;
   dealCount: number;
@@ -71,6 +82,19 @@ const netClass = (n: number) => {
   return "";
 };
 
+const DEFAULT_ITEM_TYPES = ["card", "sealed", "slab", "cash"];
+
+const createNewEditableItem = (): EditableDealItem => ({
+  id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  direction: "incoming",
+  quantity: "1",
+  price: "0",
+  itemType: "card",
+  notes: "",
+  label: "Manual item",
+  isNew: true,
+});
+
 export const DealHistoryPage: FC = () => {
   const [view, setView] = useState<View>("deals");
 
@@ -105,6 +129,9 @@ export const DealHistoryPage: FC = () => {
   const [editingDeal, setEditingDeal] = useState<DealSummary | null>(null);
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editItems, setEditItems] = useState<EditableDealItem[]>([]);
+  const [removedItemIds, setRemovedItemIds] = useState<string[]>([]);
+  const [crudError, setCrudError] = useState<string | null>(null);
   const [deletingDeal, setDeletingDeal] = useState<DealSummary | null>(null);
   const [crudLoading, setCrudLoading] = useState(false);
 
@@ -142,9 +169,9 @@ export const DealHistoryPage: FC = () => {
             new Set(
               allDealsRes.data.deals
                 .map((d) => d.location)
-                .filter((loc) => loc && loc.trim()),
+                .filter((loc): loc is string => Boolean(loc?.trim())),
             ),
-          ).sort() as string[];
+          ).sort((a, b) => a.localeCompare(b));
           setAllLocations(uniqueLocs);
         }
       } catch (error) {
@@ -226,17 +253,128 @@ export const DealHistoryPage: FC = () => {
     setEditingDeal(deal);
     setEditLocation(deal.location || "");
     setEditNotes(deal.notes || "");
+    setRemovedItemIds([]);
+    setCrudError(null);
+    setEditItems(
+      [...deal.incoming, ...deal.outgoing].map((item) => ({
+        id: item.id,
+        direction: item.direction === "outgoing" ? "outgoing" : "incoming",
+        quantity: String(item.quantity),
+        price: String(item.price),
+        itemType: item.itemType || "card",
+        notes: item.notes || "",
+        label: item.card?.data?.name || item.itemType || "Deal item",
+      })),
+    );
+  };
+
+  const updateEditItem = (
+    itemId: string,
+    field: keyof Omit<EditableDealItem, "id" | "label">,
+    value: string,
+  ) => {
+    setEditItems((items) =>
+      items.map((item) =>
+        item.id === itemId ? { ...item, [field]: value } : item,
+      ),
+    );
+  };
+
+  const removeEditItem = (itemId: string) => {
+    setEditItems((items) => {
+      const target = items.find((item) => item.id === itemId);
+      if (!target) {
+        return items;
+      }
+      if (!target.isNew) {
+        setRemovedItemIds((ids) =>
+          ids.includes(itemId) ? ids : [...ids, itemId],
+        );
+      }
+      return items.filter((item) => item.id !== itemId);
+    });
+  };
+
+  const addNewEditItem = () => {
+    setEditItems((items) => [...items, createNewEditableItem()]);
   };
 
   const handleEditSave = async () => {
     if (!editingDeal) return;
+    setCrudError(null);
+
+    const parsedItems = editItems.map((item) => {
+      const quantity = Number.parseInt(item.quantity, 10);
+      const price = Number.parseFloat(item.price);
+      return {
+        ...item,
+        quantity,
+        price,
+        notes: item.notes.trim() || null,
+        itemType: item.itemType.trim() || "card",
+      };
+    });
+
+    if (
+      parsedItems.some(
+        (item) => !Number.isFinite(item.quantity) || item.quantity <= 0,
+      )
+    ) {
+      setCrudError("All item quantities must be whole numbers greater than 0.");
+      return;
+    }
+
+    if (
+      parsedItems.some((item) => !Number.isFinite(item.price) || item.price < 0)
+    ) {
+      setCrudError(
+        "All item prices must be valid numbers greater than or equal to 0.",
+      );
+      return;
+    }
+
     setCrudLoading(true);
     try {
-      await axios.patch(`/api/deals/${editingDeal.id}`, {
-        location: editLocation.trim(),
-        notes: editNotes.trim(),
-      });
+      const updates: Promise<unknown>[] = [
+        axios.patch(`/api/deals/${editingDeal.id}`, {
+          location: editLocation.trim() || null,
+          notes: editNotes.trim() || null,
+        }),
+      ];
+
+      for (const item of parsedItems) {
+        if (item.isNew) {
+          updates.push(
+            axios.post(`/api/deals/${editingDeal.id}/items`, {
+              direction: item.direction,
+              quantity: item.quantity,
+              price: item.price,
+              itemType: item.itemType,
+              notes: item.notes,
+            }),
+          );
+        } else {
+          updates.push(
+            axios.patch(`/api/deals/items/${item.id}`, {
+              direction: item.direction,
+              quantity: item.quantity,
+              price: item.price,
+              itemType: item.itemType,
+              notes: item.notes,
+            }),
+          );
+        }
+      }
+
+      for (const itemId of removedItemIds) {
+        updates.push(axios.delete(`/api/deals/items/${itemId}`));
+      }
+
+      await Promise.all(updates);
+
       setEditingDeal(null);
+      setEditItems([]);
+      setRemovedItemIds([]);
       // Reload deals
       const res = await axios.get<{ deals: DealSummary[]; total: number }>(
         "/api/deals",
@@ -251,8 +389,10 @@ export const DealHistoryPage: FC = () => {
         },
       );
       setDeals(res.data.deals ?? []);
+      setTotal(res.data.total ?? 0);
     } catch (error) {
       console.error("Failed to update deal:", error);
+      setCrudError("Failed to save changes. Please try again.");
     } finally {
       setCrudLoading(false);
     }
@@ -285,6 +425,16 @@ export const DealHistoryPage: FC = () => {
       setCrudLoading(false);
     }
   };
+
+  const editLocationOptions = Array.from(
+    new Set(
+      [
+        ...allLocations,
+        editLocation.trim(),
+        editingDeal?.location?.trim() ?? "",
+      ].filter((loc) => loc.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="deal-history-page">
@@ -741,23 +891,120 @@ export const DealHistoryPage: FC = () => {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label>Location</label>
-                <input
-                  type="text"
+                <label htmlFor="edit-deal-location">Location</label>
+                <select
+                  id="edit-deal-location"
                   value={editLocation}
                   onChange={(e) => setEditLocation(e.target.value)}
-                  placeholder="e.g., Emerald City Card Show"
-                />
+                >
+                  <option value="">No location</option>
+                  {editLocationOptions.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
-                <label>Notes</label>
+                <label htmlFor="edit-deal-notes">Notes</label>
                 <textarea
+                  id="edit-deal-notes"
                   value={editNotes}
                   onChange={(e) => setEditNotes(e.target.value)}
                   placeholder="Optional notes about this deal…"
                   rows={3}
                 />
               </div>
+              <div className="form-group">
+                <div className="deal-edit-items-label">Items</div>
+                <div className="edit-item-toolbar">
+                  <button
+                    type="button"
+                    className="modal-btn modal-btn-primary"
+                    onClick={addNewEditItem}
+                    disabled={crudLoading}
+                  >
+                    Add Item
+                  </button>
+                </div>
+                {editItems.length === 0 && (
+                  <div className="text-muted">No items in this deal.</div>
+                )}
+                <div className="edit-item-list">
+                  {editItems.map((item) => {
+                    const itemTypeOptions = Array.from(
+                      new Set([...DEFAULT_ITEM_TYPES, item.itemType || "card"]),
+                    );
+                    return (
+                      <div key={item.id} className="edit-item-row">
+                        <div className="edit-item-label" title={item.label}>
+                          {item.isNew ? "New item" : item.label}
+                        </div>
+                        <select
+                          value={item.direction}
+                          onChange={(e) =>
+                            updateEditItem(item.id, "direction", e.target.value)
+                          }
+                        >
+                          <option value="incoming">Incoming</option>
+                          <option value="outgoing">Outgoing</option>
+                        </select>
+                        <select
+                          value={item.itemType}
+                          onChange={(e) =>
+                            updateEditItem(item.id, "itemType", e.target.value)
+                          }
+                        >
+                          {itemTypeOptions.map((type) => (
+                            <option key={type} value={type}>
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateEditItem(item.id, "quantity", e.target.value)
+                          }
+                          aria-label={`Quantity for ${item.label}`}
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.price}
+                          onChange={(e) =>
+                            updateEditItem(item.id, "price", e.target.value)
+                          }
+                          aria-label={`Price for ${item.label}`}
+                        />
+                        <input
+                          type="text"
+                          value={item.notes}
+                          onChange={(e) =>
+                            updateEditItem(item.id, "notes", e.target.value)
+                          }
+                          placeholder={
+                            item.isNew ? "Item name or notes" : "Item notes"
+                          }
+                          aria-label={`Notes for ${item.label}`}
+                        />
+                        <button
+                          type="button"
+                          className="action-btn action-btn-delete"
+                          onClick={() => removeEditItem(item.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {crudError && <p className="text-warning">{crudError}</p>}
             </div>
             <div className="modal-footer">
               <button
