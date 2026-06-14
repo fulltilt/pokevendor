@@ -126,10 +126,11 @@ export const DealHistoryPage: FC = () => {
   const [timeAnalyticsLoading, setTimeAnalyticsLoading] = useState(false);
 
   // --- CRUD modals state ---
-  const [editingDeal, setEditingDeal] = useState<DealSummary | null>(null);
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editItems, setEditItems] = useState<EditableDealItem[]>([]);
+  const [incomingPercentage, setIncomingPercentage] = useState("100");
   const [removedItemIds, setRemovedItemIds] = useState<string[]>([]);
   const [crudError, setCrudError] = useState<string | null>(null);
   const [deletingDeal, setDeletingDeal] = useState<DealSummary | null>(null);
@@ -624,66 +625,276 @@ export const DealHistoryPage: FC = () => {
                       {isExpanded && (
                         <tr className="deal-detail-row">
                           <td colSpan={7}>
-                            <div className="deal-detail-grid">
-                              {(["incoming", "outgoing"] as const).map(
-                                (dir) => (
-                                  <div key={dir} className="deal-detail-col">
-                                    <div className="deal-detail-col-header">
-                                      {dir === "incoming"
-                                        ? "Incoming"
-                                        : "Outgoing"}
-                                    </div>
-                                    {deal[dir].length === 0 && (
-                                      <div className="text-muted">No items</div>
-                                    )}
-                                    {deal[dir].map((item) => (
-                                      <div
-                                        key={item.id}
-                                        className="deal-detail-item"
-                                      >
-                                        {item.card?.data?.images?.small ? (
-                                          <img
-                                            src={item.card.data.images.small}
-                                            alt={item.card.data.name}
-                                            className="deal-detail-thumb"
-                                          />
-                                        ) : (
-                                          <div className="deal-detail-thumb deal-detail-thumb--empty" />
-                                        )}
-                                        <div className="deal-detail-item-info">
-                                          <span className="deal-detail-item-name">
-                                            {item.notes ||
-                                              item.card?.data?.name ||
-                                              item.itemType}
-                                            {item.itemType !== "card" && (
-                                              <span className="item-type-badge">
-                                                {" "}
-                                                [{item.itemType}]
+                            {editingDealId === deal.id ? (
+                              <div className="deal-edit-expanded">
+                                <div className="deal-edit-header">
+                                  <div className="form-group">
+                                    <label htmlFor={`loc-${deal.id}`}>
+                                      Location
+                                    </label>
+                                    <select
+                                      id={`loc-${deal.id}`}
+                                      value={editLocation}
+                                      onChange={(e) =>
+                                        setEditLocation(e.target.value)
+                                      }
+                                    >
+                                      <option value="">No location</option>
+                                      {editLocationOptions.map((loc) => (
+                                        <option key={loc} value={loc}>
+                                          {loc}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="form-group">
+                                    <label htmlFor={`notes-${deal.id}`}>
+                                      Notes
+                                    </label>
+                                    <textarea
+                                      id={`notes-${deal.id}`}
+                                      value={editNotes}
+                                      onChange={(e) =>
+                                        setEditNotes(e.target.value)
+                                      }
+                                      placeholder="Optional notes about this deal…"
+                                      rows={2}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="deal-edit-items-section">
+                                  {(["incoming", "outgoing"] as const).map(
+                                    (dir) => {
+                                      const dirItems = editItems.filter(
+                                        (i) => i.direction === dir,
+                                      );
+                                      return (
+                                        <div
+                                          key={dir}
+                                          className="deal-edit-item-box"
+                                        >
+                                          <div className="deal-edit-item-box-header">
+                                            {dir === "incoming"
+                                              ? "Incoming"
+                                              : "Outgoing"}
+                                          </div>
+                                          {dir === "incoming" && (
+                                            <div className="incoming-percentage-controls">
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                step="0.1"
+                                                value={incomingPercentage}
+                                                onChange={(e) =>
+                                                  setIncomingPercentage(
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                placeholder="Percentage"
+                                                aria-label="Incoming item percentage"
+                                              />
+                                              <button
+                                                type="button"
+                                                className="modal-btn modal-btn-secondary"
+                                                onClick={
+                                                  applyIncomingPercentage
+                                                }
+                                                disabled={crudLoading}
+                                              >
+                                                Apply %
+                                              </button>
+                                            </div>
+                                          )}
+                                          {dirItems.length === 0 ? (
+                                            <div className="text-muted">
+                                              No items
+                                            </div>
+                                          ) : (
+                                            <div className="edit-item-list">
+                                              {dirItems.map((item) => {
+                                                const itemTypeOptions =
+                                                  Array.from(
+                                                    new Set([
+                                                      ...DEFAULT_ITEM_TYPES,
+                                                      item.itemType || "card",
+                                                    ]),
+                                                  );
+                                                return (
+                                                  <div
+                                                    key={item.id}
+                                                    className="edit-item-inline"
+                                                  >
+                                                    <input
+                                                      type="text"
+                                                      value={item.notes}
+                                                      onChange={(e) =>
+                                                        updateEditItem(
+                                                          item.id,
+                                                          "notes",
+                                                          e.target.value,
+                                                        )
+                                                      }
+                                                      placeholder={item.label}
+                                                      className="edit-item-name"
+                                                    />
+                                                    <select
+                                                      value={item.itemType}
+                                                      onChange={(e) =>
+                                                        updateEditItem(
+                                                          item.id,
+                                                          "itemType",
+                                                          e.target.value,
+                                                        )
+                                                      }
+                                                    >
+                                                      {itemTypeOptions.map(
+                                                        (type) => (
+                                                          <option
+                                                            key={type}
+                                                            value={type}
+                                                          >
+                                                            {type}
+                                                          </option>
+                                                        ),
+                                                      )}
+                                                    </select>
+                                                    <input
+                                                      type="number"
+                                                      min="1"
+                                                      step="1"
+                                                      value={item.quantity}
+                                                      onChange={(e) =>
+                                                        updateEditItem(
+                                                          item.id,
+                                                          "quantity",
+                                                          e.target.value,
+                                                        )
+                                                      }
+                                                      placeholder="Qty"
+                                                    />
+                                                    <input
+                                                      type="number"
+                                                      min="0"
+                                                      step="0.01"
+                                                      value={item.price}
+                                                      onChange={(e) =>
+                                                        updateEditItem(
+                                                          item.id,
+                                                          "price",
+                                                          e.target.value,
+                                                        )
+                                                      }
+                                                      placeholder="Price"
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      className="action-btn action-btn-delete"
+                                                      onClick={() =>
+                                                        removeEditItem(item.id)
+                                                      }
+                                                    >
+                                                      ✕
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    },
+                                  )}
+                                </div>
+
+                                {crudError && (
+                                  <p className="text-warning">{crudError}</p>
+                                )}
+
+                                <div className="deal-edit-footer">
+                                  <button
+                                    type="button"
+                                    className="modal-btn modal-btn-cancel"
+                                    onClick={handleEditClose}
+                                    disabled={crudLoading}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="modal-btn modal-btn-primary"
+                                    onClick={handleEditSave}
+                                    disabled={crudLoading}
+                                  >
+                                    {crudLoading ? "Saving…" : "Save Changes"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="deal-detail-grid">
+                                {(["incoming", "outgoing"] as const).map(
+                                  (dir) => (
+                                    <div key={dir} className="deal-detail-col">
+                                      <div className="deal-detail-col-header">
+                                        {dir === "incoming"
+                                          ? "Incoming"
+                                          : "Outgoing"}
+                                      </div>
+                                      {deal[dir].length === 0 && (
+                                        <div className="text-muted">
+                                          No items
+                                        </div>
+                                      )}
+                                      {deal[dir].map((item) => (
+                                        <div
+                                          key={item.id}
+                                          className="deal-detail-item"
+                                        >
+                                          {item.card?.data?.images?.small ? (
+                                            <img
+                                              src={item.card.data.images.small}
+                                              alt={item.card.data.name}
+                                              className="deal-detail-thumb"
+                                            />
+                                          ) : (
+                                            <div className="deal-detail-thumb deal-detail-thumb--empty" />
+                                          )}
+                                          <div className="deal-detail-item-info">
+                                            <span className="deal-detail-item-name">
+                                              {item.notes ||
+                                                item.card?.data?.name ||
+                                                item.itemType}
+                                              {item.itemType !== "card" && (
+                                                <span className="item-type-badge">
+                                                  {" "}
+                                                  [{item.itemType}]
+                                                </span>
+                                              )}
+                                            </span>
+                                            {(item.card?.data?.number ||
+                                              item.card?.data?.set?.name) && (
+                                              <span className="deal-detail-item-meta">
+                                                {item.card.data.number &&
+                                                  `#${item.card.data.number}`}
+                                                {item.card.data.number &&
+                                                  item.card.data.set?.name &&
+                                                  " · "}
+                                                {item.card.data.set?.name}
                                               </span>
                                             )}
-                                          </span>
-                                          {(item.card?.data?.number ||
-                                            item.card?.data?.set?.name) && (
-                                            <span className="deal-detail-item-meta">
-                                              {item.card.data.number &&
-                                                `#${item.card.data.number}`}
-                                              {item.card.data.number &&
-                                                item.card.data.set?.name &&
-                                                " · "}
-                                              {item.card.data.set?.name}
+                                            <span className="deal-detail-item-price">
+                                              {item.quantity} ×{" "}
+                                              {fmt(item.price)} ={" "}
+                                              {fmt(item.quantity * item.price)}
                                             </span>
-                                          )}
-                                          <span className="deal-detail-item-price">
-                                            {item.quantity} × {fmt(item.price)}{" "}
-                                            = {fmt(item.quantity * item.price)}
-                                          </span>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ),
-                              )}
-                            </div>
+                                      ))}
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -873,158 +1084,6 @@ export const DealHistoryPage: FC = () => {
             </>
           )}
         </>
-      )}
-
-      {/* --- EDIT DEAL MODAL --- */}
-      {editingDeal && (
-        <div className="modal-overlay" onClick={() => setEditingDeal(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Edit Deal</h2>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={() => setEditingDeal(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label htmlFor="edit-deal-location">Location</label>
-                <select
-                  id="edit-deal-location"
-                  value={editLocation}
-                  onChange={(e) => setEditLocation(e.target.value)}
-                >
-                  <option value="">No location</option>
-                  {editLocationOptions.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-deal-notes">Notes</label>
-                <textarea
-                  id="edit-deal-notes"
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Optional notes about this deal…"
-                  rows={3}
-                />
-              </div>
-              <div className="form-group">
-                <div className="deal-edit-items-label">Items</div>
-                <div className="edit-item-toolbar">
-                  <button
-                    type="button"
-                    className="modal-btn modal-btn-primary"
-                    onClick={addNewEditItem}
-                    disabled={crudLoading}
-                  >
-                    Add Item
-                  </button>
-                </div>
-                {editItems.length === 0 && (
-                  <div className="text-muted">No items in this deal.</div>
-                )}
-                <div className="edit-item-list">
-                  {editItems.map((item) => {
-                    const itemTypeOptions = Array.from(
-                      new Set([...DEFAULT_ITEM_TYPES, item.itemType || "card"]),
-                    );
-                    return (
-                      <div key={item.id} className="edit-item-row">
-                        <div className="edit-item-label" title={item.label}>
-                          {item.isNew ? "New item" : item.label}
-                        </div>
-                        <select
-                          value={item.direction}
-                          onChange={(e) =>
-                            updateEditItem(item.id, "direction", e.target.value)
-                          }
-                        >
-                          <option value="incoming">Incoming</option>
-                          <option value="outgoing">Outgoing</option>
-                        </select>
-                        <select
-                          value={item.itemType}
-                          onChange={(e) =>
-                            updateEditItem(item.id, "itemType", e.target.value)
-                          }
-                        >
-                          {itemTypeOptions.map((type) => (
-                            <option key={type} value={type}>
-                              {type}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateEditItem(item.id, "quantity", e.target.value)
-                          }
-                          aria-label={`Quantity for ${item.label}`}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.price}
-                          onChange={(e) =>
-                            updateEditItem(item.id, "price", e.target.value)
-                          }
-                          aria-label={`Price for ${item.label}`}
-                        />
-                        <input
-                          type="text"
-                          value={item.notes}
-                          onChange={(e) =>
-                            updateEditItem(item.id, "notes", e.target.value)
-                          }
-                          placeholder={
-                            item.isNew ? "Item name or notes" : "Item notes"
-                          }
-                          aria-label={`Notes for ${item.label}`}
-                        />
-                        <button
-                          type="button"
-                          className="action-btn action-btn-delete"
-                          onClick={() => removeEditItem(item.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              {crudError && <p className="text-warning">{crudError}</p>}
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="modal-btn modal-btn-cancel"
-                onClick={() => setEditingDeal(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="modal-btn modal-btn-primary"
-                onClick={handleEditSave}
-                disabled={crudLoading}
-              >
-                {crudLoading ? "Saving…" : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* --- DELETE CONFIRMATION MODAL --- */}
