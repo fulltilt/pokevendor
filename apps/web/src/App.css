@@ -1487,6 +1487,14 @@ body {
   background-color: var(--bg-tertiary);
 }
 
+.deal-history-row.editing {
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+.deal-history-row.editing td {
+  border-bottom-color: rgba(99, 102, 241, 0.45);
+}
+
 .deal-expand-cell {
   color: var(--text-secondary);
   font-size: 0.7rem;
@@ -1498,6 +1506,10 @@ body {
 .deal-detail-row td {
   padding: 0 !important;
   border-bottom: 2px solid var(--accent);
+}
+
+.deal-detail-row.editing td {
+  border-bottom-color: rgba(99, 102, 241, 0.8);
 }
 
 .deal-detail-grid {
@@ -2045,6 +2057,11 @@ body {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 0.25rem;
+}
+
+.deal-edit-expanded.is-editing {
+  border-color: rgba(99, 102, 241, 0.8);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
 }
 
 .deal-edit-header {

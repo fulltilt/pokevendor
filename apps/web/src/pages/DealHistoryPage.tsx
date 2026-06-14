@@ -135,6 +135,10 @@ export const DealHistoryPage: FC = () => {
   const [crudError, setCrudError] = useState<string | null>(null);
   const [deletingDeal, setDeletingDeal] = useState<DealSummary | null>(null);
   const [crudLoading, setCrudLoading] = useState(false);
+  const editingDeal =
+    editingDealId !== null
+      ? (deals.find((deal) => deal.id === editingDealId) ?? null)
+      : null;
 
   useEffect(() => {
     const load = async () => {
@@ -251,9 +255,11 @@ export const DealHistoryPage: FC = () => {
 
   // --- CRUD Handlers ---
   const handleEditOpen = (deal: DealSummary) => {
-    setEditingDeal(deal);
+    setExpandedId(deal.id);
+    setEditingDealId(deal.id);
     setEditLocation(deal.location || "");
     setEditNotes(deal.notes || "");
+    setIncomingPercentage("100");
     setRemovedItemIds([]);
     setCrudError(null);
     setEditItems(
@@ -267,6 +273,14 @@ export const DealHistoryPage: FC = () => {
         label: item.card?.data?.name || item.itemType || "Deal item",
       })),
     );
+  };
+
+  const handleEditClose = () => {
+    setEditingDealId(null);
+    setEditItems([]);
+    setRemovedItemIds([]);
+    setCrudError(null);
+    setIncomingPercentage("100");
   };
 
   const updateEditItem = (
@@ -296,8 +310,38 @@ export const DealHistoryPage: FC = () => {
     });
   };
 
-  const addNewEditItem = () => {
-    setEditItems((items) => [...items, createNewEditableItem()]);
+  const addNewEditItem = (direction: "incoming" | "outgoing") => {
+    setEditItems((items) => [
+      ...items,
+      {
+        ...createNewEditableItem(),
+        direction,
+      },
+    ]);
+  };
+
+  const applyIncomingPercentage = () => {
+    const pct = Number.parseFloat(incomingPercentage);
+    if (!Number.isFinite(pct) || pct <= 0) {
+      setCrudError("Incoming % must be a valid number greater than 0.");
+      return;
+    }
+
+    const multiplier = pct / 100;
+    setCrudError(null);
+    setEditItems((items) =>
+      items.map((item) => {
+        if (item.direction !== "incoming") {
+          return item;
+        }
+        const currentPrice = Number.parseFloat(item.price);
+        const safePrice = Number.isFinite(currentPrice) ? currentPrice : 0;
+        return {
+          ...item,
+          price: (safePrice * multiplier).toFixed(2),
+        };
+      }),
+    );
   };
 
   const handleEditSave = async () => {
@@ -373,9 +417,7 @@ export const DealHistoryPage: FC = () => {
 
       await Promise.all(updates);
 
-      setEditingDeal(null);
-      setEditItems([]);
-      setRemovedItemIds([]);
+      handleEditClose();
       // Reload deals
       const res = await axios.get<{ deals: DealSummary[]; total: number }>(
         "/api/deals",
@@ -567,10 +609,11 @@ export const DealHistoryPage: FC = () => {
               <tbody>
                 {deals.map((deal) => {
                   const isExpanded = expandedId === deal.id;
+                  const isEditing = editingDealId === deal.id;
                   return (
                     <Fragment key={deal.id}>
                       <tr
-                        className={`deal-history-row${isExpanded ? " expanded" : ""}`}
+                        className={`deal-history-row${isExpanded ? " expanded" : ""}${isEditing ? " editing" : ""}`}
                       >
                         <td>
                           {fmtDate(deal.dateFinalized ?? deal.dateCreated)}
@@ -594,10 +637,14 @@ export const DealHistoryPage: FC = () => {
                             className="action-btn action-btn-edit"
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (editingDealId === deal.id) {
+                                handleEditClose();
+                                return;
+                              }
                               handleEditOpen(deal);
                             }}
                           >
-                            Edit
+                            {isEditing ? "Cancel Edit" : "Edit"}
                           </button>
                           <button
                             type="button"
@@ -623,10 +670,12 @@ export const DealHistoryPage: FC = () => {
                       </tr>
 
                       {isExpanded && (
-                        <tr className="deal-detail-row">
+                        <tr
+                          className={`deal-detail-row${isEditing ? " editing" : ""}`}
+                        >
                           <td colSpan={7}>
-                            {editingDealId === deal.id ? (
-                              <div className="deal-edit-expanded">
+                            {isEditing ? (
+                              <div className="deal-edit-expanded is-editing">
                                 <div className="deal-edit-header">
                                   <div className="form-group">
                                     <label htmlFor={`loc-${deal.id}`}>
@@ -675,9 +724,21 @@ export const DealHistoryPage: FC = () => {
                                           className="deal-edit-item-box"
                                         >
                                           <div className="deal-edit-item-box-header">
-                                            {dir === "incoming"
-                                              ? "Incoming"
-                                              : "Outgoing"}
+                                            <span>
+                                              {dir === "incoming"
+                                                ? "Incoming"
+                                                : "Outgoing"}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              className="modal-btn modal-btn-secondary"
+                                              onClick={() =>
+                                                addNewEditItem(dir)
+                                              }
+                                              disabled={crudLoading}
+                                            >
+                                              + Add Item
+                                            </button>
                                           </div>
                                           {dir === "incoming" && (
                                             <div className="incoming-percentage-controls">

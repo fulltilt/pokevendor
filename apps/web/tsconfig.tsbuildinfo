@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/components/cardsearchpanel.tsx","./src/components/cardthumbnail.tsx","./src/pages/cardsearch.tsx","./src/pages/dealhistorypage.tsx","./src/pages/dealtrackerpage.tsx","./src/pages/inventorypage.tsx"],"errors":true,"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/cardsearchpanel.tsx","./src/components/cardthumbnail.tsx","./src/pages/cardsearch.tsx","./src/pages/dealhistorypage.tsx","./src/pages/dealtrackerpage.tsx","./src/pages/inventorypage.tsx"],"version":"5.9.3"}
