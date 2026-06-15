@@ -97,6 +97,8 @@ const createNewEditableItem = (): EditableDealItem => ({
 
 export const DealHistoryPage: FC = () => {
   const [view, setView] = useState<View>("deals");
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   // --- Deal list state ---
   const [deals, setDeals] = useState<DealSummary[]>([]);
@@ -479,9 +481,208 @@ export const DealHistoryPage: FC = () => {
     ),
   ).sort((a, b) => a.localeCompare(b));
 
+  const toCsvCell = (value: string | number) => {
+    const raw = String(value ?? "");
+    if (/[,"\n\r]/.test(raw)) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const formatExportMoney = (n: number) => n.toFixed(2);
+
+  const getDealTimestamp = (deal: DealSummary) =>
+    deal.dateFinalized ?? deal.dateCreated;
+
+  const matchesAnalyticsFilters = (deal: DealSummary) => {
+    const locationOk = filterLocation
+      ? (deal.location || "").toLowerCase() === filterLocation.toLowerCase()
+      : true;
+
+    const date = getDealTimestamp(deal);
+    const fromOk = filterDateFrom ? date.slice(0, 10) >= filterDateFrom : true;
+    const toOk = filterDateTo ? date.slice(0, 10) <= filterDateTo : true;
+
+    return locationOk && fromOk && toOk;
+  };
+
+  const applyDealsViewSort = (items: DealSummary[]) => {
+    const next = [...items];
+    if (sortBy === "location") {
+      next.sort((a, b) =>
+        (a.location || "").localeCompare(b.location || "", undefined, {
+          sensitivity: "base",
+        }),
+      );
+      return next;
+    }
+
+    next.sort((a, b) => {
+      const aDate = new Date(getDealTimestamp(a)).getTime();
+      const bDate = new Date(getDealTimestamp(b)).getTime();
+      return sortBy === "dateAsc" ? aDate - bDate : bDate - aDate;
+    });
+    return next;
+  };
+
+  const buildExportCsv = (items: DealSummary[]) => {
+    const rows: string[][] = [
+      ["Export Type", "Deal History"],
+      ["Exported At", new Date().toLocaleString()],
+      ["View", view],
+      ["Total Deals", String(items.length)],
+      [],
+      [
+        "Deal ID",
+        "Date",
+        "Location",
+        "Incoming Total",
+        "Outgoing Total",
+        "Net Cash",
+        "Incoming Item Count",
+        "Outgoing Item Count",
+        "Notes",
+      ],
+    ];
+
+    items.forEach((deal) => {
+      rows.push([
+        deal.id,
+        getDealTimestamp(deal),
+        deal.location || "",
+        formatExportMoney(deal.incomingTotal),
+        formatExportMoney(deal.outgoingTotal),
+        formatExportMoney(deal.netCash),
+        String(deal.incoming.length),
+        String(deal.outgoing.length),
+        deal.notes || "",
+      ]);
+    });
+
+    rows.push([]);
+    rows.push([
+      "Deal ID",
+      "Direction",
+      "Item Type",
+      "Name",
+      "Set",
+      "Number",
+      "Quantity",
+      "Unit Price",
+      "Line Total",
+      "Notes",
+    ]);
+
+    items.forEach((deal) => {
+      (["incoming", "outgoing"] as const).forEach((direction) => {
+        deal[direction].forEach((item) => {
+          const itemName = item.notes || item.card?.data?.name || item.itemType;
+          const lineTotal = item.price * item.quantity;
+          rows.push([
+            deal.id,
+            direction,
+            item.itemType,
+            itemName,
+            item.card?.data?.set?.name || "",
+            item.card?.data?.number || "",
+            String(item.quantity),
+            formatExportMoney(item.price),
+            formatExportMoney(lineTotal),
+            item.notes || "",
+          ]);
+        });
+      });
+    });
+
+    return rows
+      .map((r) => r.map((cell) => toCsvCell(cell)).join(","))
+      .join("\n");
+  };
+
+  const exportFilteredDeals = async () => {
+    setIsExporting(true);
+    setExportNotice(null);
+    try {
+      const limit = 250;
+      let offset = 0;
+      let hasMore = true;
+      const allDeals: DealSummary[] = [];
+
+      while (hasMore) {
+        const res = await axios.get<{ deals: DealSummary[]; total: number }>(
+          "/api/deals",
+          {
+            params: {
+              status: "finalized",
+              limit,
+              offset,
+            },
+          },
+        );
+
+        const batch = res.data.deals ?? [];
+        allDeals.push(...batch);
+        offset += batch.length;
+        hasMore = batch.length === limit;
+      }
+
+      let exportDeals = allDeals;
+
+      if (view === "deals") {
+        const qLower = q.trim().toLowerCase();
+        if (qLower) {
+          exportDeals = exportDeals.filter((deal) =>
+            `${deal.location || ""} ${deal.notes || ""}`
+              .toLowerCase()
+              .includes(qLower),
+          );
+        }
+        exportDeals = applyDealsViewSort(exportDeals);
+      } else {
+        exportDeals = exportDeals
+          .filter((deal) => matchesAnalyticsFilters(deal))
+          .sort(
+            (a, b) =>
+              new Date(getDealTimestamp(b)).getTime() -
+              new Date(getDealTimestamp(a)).getTime(),
+          );
+      }
+
+      if (exportDeals.length === 0) {
+        setExportNotice("No deals matched the current filters to export.");
+        return;
+      }
+
+      const csv = `\uFEFF${buildExportCsv(exportDeals)}`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const datePart = new Date().toISOString().slice(0, 10);
+
+      link.href = url;
+      link.download = `deal-history-${view}-${datePart}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setExportNotice(
+        `Exported ${exportDeals.length} finalized deal${exportDeals.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      console.error("Failed to export deal history:", error);
+      setExportNotice("Failed to export deal history.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="deal-history-page">
       <h1>Deal History</h1>
+
+      {exportNotice && (
+        <div className="search-status-banner">{exportNotice}</div>
+      )}
 
       <div className="deal-history-tabs">
         <button
@@ -580,6 +781,14 @@ export const DealHistoryPage: FC = () => {
               <option value="dateAsc">Oldest First</option>
               <option value="location">Location A–Z</option>
             </select>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void exportFilteredDeals()}
+              disabled={isExporting}
+            >
+              {isExporting ? "Exporting…" : "Export to Spreadsheet"}
+            </button>
             <span className="deal-history-count">
               {total} deal{total === 1 ? "" : "s"}
             </span>

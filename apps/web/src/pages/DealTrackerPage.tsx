@@ -135,6 +135,112 @@ export const DealTrackerPage: FC = () => {
   );
   const [scanCandidates, setScanCandidates] = useState<SearchCard[]>([]);
   const [loadingScanCandidates, setLoadingScanCandidates] = useState(false);
+  const [isExportingDeal, setIsExportingDeal] = useState(false);
+
+  const toCurrency = (value: number) => toFiniteNumber(value).toFixed(2);
+
+  const toCsvCell = (value: string | number) => {
+    const raw = String(value ?? "");
+    if (/[,"\n\r]/.test(raw)) {
+      return `"${raw.replace(/"/g, '""')}"`;
+    }
+    return raw;
+  };
+
+  const getItemLabel = (item: DealItem) => {
+    return item.notes || item.card?.data?.name || item.cardId || item.itemType;
+  };
+
+  const exportDealToSpreadsheet = () => {
+    if (!currentDeal) {
+      setDealNotice("Start or resume a deal before exporting.");
+      return;
+    }
+
+    setIsExportingDeal(true);
+    setDealNotice(null);
+
+    try {
+      const timestamp = new Date().toISOString();
+      const rows: string[][] = [
+        ["Deal ID", currentDeal.id],
+        ["Location", currentDeal.location || "Unspecified Location"],
+        ["Exported At", new Date(timestamp).toLocaleString()],
+        ["Incoming Total", toCurrency(incomingTotal)],
+        ["Outgoing Total", toCurrency(outgoingTotal)],
+        ["Net Cash", toCurrency(netCash)],
+        [],
+        [
+          "Direction",
+          "Item Type",
+          "Name",
+          "Card ID",
+          "Set",
+          "Card Number",
+          "Quantity",
+          "Unit Price",
+          "Line Total",
+          "Notes",
+        ],
+      ];
+
+      const allItems = [
+        ...currentDeal.incoming.map((item) => ({
+          direction: "incoming",
+          item,
+        })),
+        ...currentDeal.outgoing.map((item) => ({
+          direction: "outgoing",
+          item,
+        })),
+      ];
+
+      allItems.forEach(({ direction, item }) => {
+        const lineTotal = toFiniteNumber(item.price) * item.quantity;
+        rows[rows.length] = [
+          direction,
+          item.itemType,
+          getItemLabel(item),
+          item.cardId || "",
+          item.card?.data?.set?.name || "",
+          item.card?.data?.number || "",
+          String(item.quantity),
+          toCurrency(toFiniteNumber(item.price)),
+          toCurrency(lineTotal),
+          item.notes || "",
+        ];
+      });
+
+      const csvContent = rows
+        .map((row) => row.map((cell) => toCsvCell(cell)).join(","))
+        .join("\n");
+      const csvWithBom = `\uFEFF${csvContent}`;
+      const blob = new Blob([csvWithBom], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeLocation = (currentDeal.location || "unknown")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40);
+      const datePart = timestamp.slice(0, 10);
+
+      link.href = url;
+      link.download = `deal-${datePart}-${safeLocation || "location"}-${currentDeal.id.slice(0, 8)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setDealNotice(
+        "Deal exported to CSV. Open it in Excel, Numbers, or Google Sheets.",
+      );
+    } catch (error) {
+      console.error("Failed to export deal:", error);
+      setDealNotice("Failed to export deal.");
+    } finally {
+      setIsExportingDeal(false);
+    }
+  };
 
   const fetchDealDetails = async (dealId: string) => {
     const response = await axios.get(`/api/deals/${dealId}`);
@@ -852,6 +958,7 @@ export const DealTrackerPage: FC = () => {
 
   const renderDealItemRow = (
     item: DealItem,
+    direction: "incoming" | "outgoing",
     isCash = false,
     previewPercentage?: number,
   ) => {
@@ -870,6 +977,11 @@ export const DealTrackerPage: FC = () => {
           <div className="deal-bucket-thumb deal-bucket-thumb--empty" />
         )}
         <div className="deal-bucket-info">
+          <span
+            className={`deal-direction-label deal-direction-label--${direction}`}
+          >
+            {direction === "incoming" ? "Incoming" : "Outgoing"}
+          </span>
           <span className="deal-bucket-name">
             {item.notes ||
               item.card?.data?.name ||
@@ -1657,20 +1769,30 @@ export const DealTrackerPage: FC = () => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={finalizeDeal}
-                className="finalize-btn"
-              >
-                Finalize Deal
-              </button>
+              <div className="deal-summary-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={exportDealToSpreadsheet}
+                  disabled={isExportingDeal}
+                >
+                  {isExportingDeal ? "Exporting..." : "Export to Spreadsheet"}
+                </button>
+                <button
+                  type="button"
+                  onClick={finalizeDeal}
+                  className="finalize-btn"
+                >
+                  Finalize Deal
+                </button>
+              </div>
             </div>
 
             <div className="deal-item-columns">
               {(["incoming", "outgoing"] as const).map((col) => (
                 <section
                   key={col}
-                  className="deal-item-column"
+                  className={`deal-item-column deal-item-column--${col}`}
                   aria-label={`${col === "incoming" ? "Incoming" : "Outgoing"} items`}
                 >
                   <h3>{col === "incoming" ? "Incoming" : "Outgoing"} Items</h3>
@@ -1727,6 +1849,14 @@ export const DealTrackerPage: FC = () => {
                           {activeNetCash.toFixed(2)}
                         </strong>
                       </div>
+                      <div className="incoming-trade-credit-total">
+                        <span className="incoming-trade-credit-label">
+                          Total Trade Credit
+                        </span>
+                        <strong className="incoming-trade-credit-value">
+                          ${projectedIncomingTotal.toFixed(2)}
+                        </strong>
+                      </div>
                     </div>
                   )}
                   {currentDeal[col].length === 0 && (
@@ -1737,6 +1867,7 @@ export const DealTrackerPage: FC = () => {
                     .map((item) =>
                       renderDealItemRow(
                         item,
+                        col,
                         false,
                         col === "incoming"
                           ? outgoingTradePercentage
@@ -1753,7 +1884,7 @@ export const DealTrackerPage: FC = () => {
                       </div>
                       {currentDeal[col]
                         .filter((item) => item.itemType === "cash")
-                        .map((item) => renderDealItemRow(item, true))}
+                        .map((item) => renderDealItemRow(item, col, true))}
                     </div>
                   )}
                 </section>
