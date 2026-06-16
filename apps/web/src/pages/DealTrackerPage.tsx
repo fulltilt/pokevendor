@@ -1324,380 +1324,398 @@ export const DealTrackerPage: FC = () => {
                   </div>
                 )}
               </div>
-
-              <CardSearchPanel title="" onCardSelect={addCardToDeal} />
-
-              <div className="manual-entry-section">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() =>
-                    setShowManualIncomingCard(!showManualIncomingCard)
-                  }
-                >
-                  {showManualIncomingCard ? "▲ Cancel" : "+ Add Card Manually"}
-                </button>
-
-                {showManualIncomingCard && (
-                  <div className="manual-entry-form">
-                    <div className="context-form-grid">
-                      <label className="field-group field-group-wide">
-                        <span>Card Name / Description</span>
-                        <input
-                          type="text"
-                          placeholder="e.g. Charizard EX PSA 8"
-                          value={manualCardIncomingName}
-                          onChange={(e) =>
-                            setManualCardIncomingName(e.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Quantity</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={manualCardIncomingQty}
-                          onChange={(e) =>
-                            setManualCardIncomingQty(e.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Price</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualCardIncomingPrice}
-                          onChange={(e) =>
-                            setManualCardIncomingPrice(e.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={
-                        !manualCardIncomingName.trim() ||
-                        isSubmittingManualIncomingCard
-                      }
-                      onClick={() => void addManualIncomingCard()}
-                    >
-                      {isSubmittingManualIncomingCard
-                        ? "Adding..."
-                        : "Add to Incoming"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="manual-entry-section">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowManualIncoming(!showManualIncoming)}
-                >
-                  {showManualIncoming ? "▲ Cancel" : "+ Add Sealed / Slab"}
-                </button>
-
-                {showManualIncoming && (
-                  <div className="manual-entry-form">
-                    <div className="context-form-grid">
-                      <label className="field-group">
-                        <span>Type</span>
-                        <select
-                          value={manualIncomingType}
-                          onChange={(e) =>
-                            setManualIncomingType(
-                              e.target.value as "sealed" | "slab",
-                            )
-                          }
-                        >
-                          <option value="sealed">Sealed</option>
-                          <option value="slab">Slab</option>
-                        </select>
-                      </label>
-
-                      <label className="field-group">
-                        <span>Name / Description</span>
-                        <input
-                          type="text"
-                          placeholder="e.g. Surging Sparks booster box"
-                          value={manualIncomingName}
-                          onChange={(e) =>
-                            setManualIncomingName(e.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Quantity</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={manualIncomingQty}
-                          onChange={(e) => setManualIncomingQty(e.target.value)}
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Price</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualIncomingPrice}
-                          onChange={(e) =>
-                            setManualIncomingPrice(e.target.value)
-                          }
-                        />
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={
-                        !manualIncomingName.trim() || isSubmittingManualIncoming
-                      }
-                      onClick={() => void addManualIncomingItem()}
-                    >
-                      {isSubmittingManualIncoming
-                        ? "Adding..."
-                        : "Add to Incoming"}
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
 
-            <div className="context-panel">
-              <input
-                type="text"
-                className="search-input"
-                value={outgoingSearch}
-                onChange={(e) => setOutgoingSearch(e.target.value)}
-                placeholder="Search inventory by name, number, or card id"
-              />
+            <div className="deal-input-columns">
+              <div className="deal-input-column deal-input-column--incoming">
+                <h3>Incoming Items</h3>
+                <CardSearchPanel title="" onCardSelect={addCardToDeal} />
 
-              {loadingOutgoingInventory && (
-                <div className="loading">Loading inventory options...</div>
-              )}
+                <div className="manual-entry-section">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      setShowManualIncomingCard(!showManualIncomingCard)
+                    }
+                  >
+                    {showManualIncomingCard
+                      ? "▲ Cancel"
+                      : "+ Add Card Manually"}
+                  </button>
 
-              {!loadingOutgoingInventory && !outgoingCandidates.length && (
-                <div className="search-status-banner">
-                  No inventory cards available for outgoing.
-                </div>
-              )}
+                  {showManualIncomingCard && (
+                    <div className="manual-entry-form">
+                      <div className="context-form-grid">
+                        <label className="field-group field-group-wide">
+                          <span>Card Name / Description</span>
+                          <input
+                            type="text"
+                            placeholder="e.g. Charizard EX PSA 8"
+                            value={manualCardIncomingName}
+                            onChange={(e) =>
+                              setManualCardIncomingName(e.target.value)
+                            }
+                          />
+                        </label>
 
-              {!loadingOutgoingInventory && outgoingCandidates.length > 0 && (
-                <div className="deal-outgoing-list">
-                  {outgoingCandidates.map((candidate) => (
-                    <div
-                      key={candidate.cardId}
-                      className="outgoing-candidate-row"
-                    >
-                      {candidate.itemImage ? (
-                        <img
-                          src={candidate.itemImage}
-                          alt={candidate.itemName}
-                          className="outgoing-candidate-thumb"
-                        />
-                      ) : (
-                        <div className="outgoing-candidate-thumb outgoing-candidate-thumb--empty" />
-                      )}
-                      <div className="outgoing-candidate-info">
-                        <span className="outgoing-candidate-name">
-                          {candidate.itemName}
-                        </span>
-                        <span className="outgoing-candidate-meta">
-                          {candidate.itemNumber && `#${candidate.itemNumber}`}
-                          {candidate.itemNumber && candidate.setName && " · "}
-                          {candidate.setName}
-                        </span>
-                        <span className="outgoing-candidate-sub">
-                          Avail: {candidate.availableQuantity} · $
-                          {candidate.suggestedPrice.toFixed(2)}
-                        </span>
+                        <label className="field-group">
+                          <span>Quantity</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={manualCardIncomingQty}
+                            onChange={(e) =>
+                              setManualCardIncomingQty(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Price</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualCardIncomingPrice}
+                            onChange={(e) =>
+                              setManualCardIncomingPrice(e.target.value)
+                            }
+                          />
+                        </label>
                       </div>
+
                       <button
                         type="button"
-                        className="btn-secondary"
+                        className="btn-primary"
                         disabled={
-                          (Number.parseInt(itemQuantity) || 1) >
-                          candidate.availableQuantity
+                          !manualCardIncomingName.trim() ||
+                          isSubmittingManualIncomingCard
                         }
-                        onClick={() =>
-                          void addOutgoingFromInventory(
-                            candidate.cardId,
-                            candidate.suggestedPrice,
-                            candidate.itemName,
-                            candidate.availableQuantity,
-                          )
-                        }
+                        onClick={() => void addManualIncomingCard()}
                       >
-                        Add
+                        {isSubmittingManualIncomingCard
+                          ? "Adding..."
+                          : "Add to Incoming"}
                       </button>
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
 
-              <div className="manual-entry-section">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() =>
-                    setShowManualOutgoingCard(!showManualOutgoingCard)
-                  }
-                >
-                  {showManualOutgoingCard
-                    ? "▲ Cancel"
-                    : "+ Add Card Manually to Outgoing"}
-                </button>
+                <div className="manual-entry-section">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowManualIncoming(!showManualIncoming)}
+                  >
+                    {showManualIncoming ? "▲ Cancel" : "+ Add Sealed / Slab"}
+                  </button>
 
-                {showManualOutgoingCard && (
-                  <div className="manual-entry-form">
-                    <div className="context-form-grid">
-                      <label className="field-group field-group-wide">
-                        <span>Card Name / Description</span>
-                        <input
-                          type="text"
-                          placeholder="e.g. Blastoise PSA 9"
-                          value={manualCardOutgoingName}
-                          onChange={(e) =>
-                            setManualCardOutgoingName(e.target.value)
-                          }
-                        />
-                      </label>
+                  {showManualIncoming && (
+                    <div className="manual-entry-form">
+                      <div className="context-form-grid">
+                        <label className="field-group">
+                          <span>Type</span>
+                          <select
+                            value={manualIncomingType}
+                            onChange={(e) =>
+                              setManualIncomingType(
+                                e.target.value as "sealed" | "slab",
+                              )
+                            }
+                          >
+                            <option value="sealed">Sealed</option>
+                            <option value="slab">Slab</option>
+                          </select>
+                        </label>
 
-                      <label className="field-group">
-                        <span>Quantity</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={manualCardOutgoingQty}
-                          onChange={(e) =>
-                            setManualCardOutgoingQty(e.target.value)
-                          }
-                        />
-                      </label>
+                        <label className="field-group">
+                          <span>Name / Description</span>
+                          <input
+                            type="text"
+                            placeholder="e.g. Surging Sparks booster box"
+                            value={manualIncomingName}
+                            onChange={(e) =>
+                              setManualIncomingName(e.target.value)
+                            }
+                          />
+                        </label>
 
-                      <label className="field-group">
-                        <span>Price</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualCardOutgoingPrice}
-                          onChange={(e) =>
-                            setManualCardOutgoingPrice(e.target.value)
-                          }
-                        />
-                      </label>
+                        <label className="field-group">
+                          <span>Quantity</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={manualIncomingQty}
+                            onChange={(e) =>
+                              setManualIncomingQty(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Price</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualIncomingPrice}
+                            onChange={(e) =>
+                              setManualIncomingPrice(e.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={
+                          !manualIncomingName.trim() ||
+                          isSubmittingManualIncoming
+                        }
+                        onClick={() => void addManualIncomingItem()}
+                      >
+                        {isSubmittingManualIncoming
+                          ? "Adding..."
+                          : "Add to Incoming"}
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={
-                        !manualCardOutgoingName.trim() ||
-                        isSubmittingManualOutgoingCard
-                      }
-                      onClick={() => void addManualOutgoingCard()}
-                    >
-                      {isSubmittingManualOutgoingCard
-                        ? "Adding..."
-                        : "Add to Outgoing"}
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              <div className="manual-entry-section">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setShowManualOutgoing(!showManualOutgoing)}
-                >
-                  {showManualOutgoing
-                    ? "▲ Cancel"
-                    : "+ Add Sealed / Slab to Outgoing"}
-                </button>
+              <div className="deal-input-column deal-input-column--outgoing">
+                <h3>Outgoing Items</h3>
+                <div className="context-panel">
+                  <input
+                    type="text"
+                    className="search-input"
+                    value={outgoingSearch}
+                    onChange={(e) => setOutgoingSearch(e.target.value)}
+                    placeholder="Search inventory by name, number, or card id"
+                  />
 
-                {showManualOutgoing && (
-                  <div className="manual-entry-form">
-                    <div className="context-form-grid">
-                      <label className="field-group">
-                        <span>Type</span>
-                        <select
-                          value={manualOutgoingType}
-                          onChange={(e) =>
-                            setManualOutgoingType(
-                              e.target.value as "sealed" | "slab",
-                            )
-                          }
-                        >
-                          <option value="sealed">Sealed</option>
-                          <option value="slab">Slab</option>
-                        </select>
-                      </label>
+                  {loadingOutgoingInventory && (
+                    <div className="loading">Loading inventory options...</div>
+                  )}
 
-                      <label className="field-group">
-                        <span>Name / Description</span>
-                        <input
-                          type="text"
-                          placeholder="e.g. Pikachu PSA 10"
-                          value={manualOutgoingName}
-                          onChange={(e) =>
-                            setManualOutgoingName(e.target.value)
-                          }
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Quantity</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={manualOutgoingQty}
-                          onChange={(e) => setManualOutgoingQty(e.target.value)}
-                        />
-                      </label>
-
-                      <label className="field-group">
-                        <span>Price</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualOutgoingPrice}
-                          onChange={(e) =>
-                            setManualOutgoingPrice(e.target.value)
-                          }
-                        />
-                      </label>
+                  {!loadingOutgoingInventory && !outgoingCandidates.length && (
+                    <div className="search-status-banner">
+                      No inventory cards available for outgoing.
                     </div>
+                  )}
 
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      disabled={
-                        !manualOutgoingName.trim() || isSubmittingManualOutgoing
-                      }
-                      onClick={() => void addManualOutgoingItem()}
-                    >
-                      {isSubmittingManualOutgoing
-                        ? "Adding..."
-                        : "Add to Outgoing"}
-                    </button>
-                  </div>
-                )}
+                  {!loadingOutgoingInventory &&
+                    outgoingCandidates.length > 0 && (
+                      <div className="deal-outgoing-list">
+                        {outgoingCandidates.map((candidate) => (
+                          <div
+                            key={candidate.cardId}
+                            className="outgoing-candidate-row"
+                          >
+                            {candidate.itemImage ? (
+                              <img
+                                src={candidate.itemImage}
+                                alt={candidate.itemName}
+                                className="outgoing-candidate-thumb"
+                              />
+                            ) : (
+                              <div className="outgoing-candidate-thumb outgoing-candidate-thumb--empty" />
+                            )}
+                            <div className="outgoing-candidate-info">
+                              <span className="outgoing-candidate-name">
+                                {candidate.itemName}
+                              </span>
+                              <span className="outgoing-candidate-meta">
+                                {candidate.itemNumber &&
+                                  `#${candidate.itemNumber}`}
+                                {candidate.itemNumber &&
+                                  candidate.setName &&
+                                  " · "}
+                                {candidate.setName}
+                              </span>
+                              <span className="outgoing-candidate-sub">
+                                Avail: {candidate.availableQuantity} · $
+                                {candidate.suggestedPrice.toFixed(2)}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={
+                                (Number.parseInt(itemQuantity) || 1) >
+                                candidate.availableQuantity
+                              }
+                              onClick={() =>
+                                void addOutgoingFromInventory(
+                                  candidate.cardId,
+                                  candidate.suggestedPrice,
+                                  candidate.itemName,
+                                  candidate.availableQuantity,
+                                )
+                              }
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </div>
+
+                <div className="manual-entry-section">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      setShowManualOutgoingCard(!showManualOutgoingCard)
+                    }
+                  >
+                    {showManualOutgoingCard
+                      ? "▲ Cancel"
+                      : "+ Add Card Manually"}
+                  </button>
+
+                  {showManualOutgoingCard && (
+                    <div className="manual-entry-form">
+                      <div className="context-form-grid">
+                        <label className="field-group field-group-wide">
+                          <span>Card Name / Description</span>
+                          <input
+                            type="text"
+                            placeholder="e.g. Blastoise PSA 9"
+                            value={manualCardOutgoingName}
+                            onChange={(e) =>
+                              setManualCardOutgoingName(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Quantity</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={manualCardOutgoingQty}
+                            onChange={(e) =>
+                              setManualCardOutgoingQty(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Price</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualCardOutgoingPrice}
+                            onChange={(e) =>
+                              setManualCardOutgoingPrice(e.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={
+                          !manualCardOutgoingName.trim() ||
+                          isSubmittingManualOutgoingCard
+                        }
+                        onClick={() => void addManualOutgoingCard()}
+                      >
+                        {isSubmittingManualOutgoingCard
+                          ? "Adding..."
+                          : "Add to Outgoing"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="manual-entry-section">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowManualOutgoing(!showManualOutgoing)}
+                  >
+                    {showManualOutgoing ? "▲ Cancel" : "+ Add Sealed / Slab"}
+                  </button>
+
+                  {showManualOutgoing && (
+                    <div className="manual-entry-form">
+                      <div className="context-form-grid">
+                        <label className="field-group">
+                          <span>Type</span>
+                          <select
+                            value={manualOutgoingType}
+                            onChange={(e) =>
+                              setManualOutgoingType(
+                                e.target.value as "sealed" | "slab",
+                              )
+                            }
+                          >
+                            <option value="sealed">Sealed</option>
+                            <option value="slab">Slab</option>
+                          </select>
+                        </label>
+
+                        <label className="field-group">
+                          <span>Name / Description</span>
+                          <input
+                            type="text"
+                            placeholder="e.g. Pikachu PSA 10"
+                            value={manualOutgoingName}
+                            onChange={(e) =>
+                              setManualOutgoingName(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Quantity</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={manualOutgoingQty}
+                            onChange={(e) =>
+                              setManualOutgoingQty(e.target.value)
+                            }
+                          />
+                        </label>
+
+                        <label className="field-group">
+                          <span>Price</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={manualOutgoingPrice}
+                            onChange={(e) =>
+                              setManualOutgoingPrice(e.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={
+                          !manualOutgoingName.trim() ||
+                          isSubmittingManualOutgoing
+                        }
+                        onClick={() => void addManualOutgoingItem()}
+                      >
+                        {isSubmittingManualOutgoing
+                          ? "Adding..."
+                          : "Add to Outgoing"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
