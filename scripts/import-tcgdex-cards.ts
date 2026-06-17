@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Import cards from TCGDex API for specified sets
+ * 1. Import cards from TCGDex API for specified sets
  * Usage: npx ts-node scripts/import-tcgdex-cards.ts [setname[:cardCount]] ...
  *
  * Examples:
@@ -13,7 +13,7 @@
  * get setId and set count from: https://api.tcgdex.net/v2/en/sets
  *
  * 
- * Get TCG Player ids
+ * 2. Get TCG Player ids
 -google "[set name] price guide" to get TCG Player set links
 
 const links = Array.from(document.querySelectorAll('a[href^="/product/"]'));
@@ -27,6 +27,12 @@ const xValues = links
 console.log(xValues);
 
 Run the script in TCG Player (google "[set name] price guide") and sort by number. Remove the code card ids at the beginning. This is 
+
+
+ * 3. Sync TCG Player ids to cards in database using sync-tcgplayer-ids.ts
+npm run sync:tcgplayer-ids -- \
+  --set-id [set id] \
+  --ids-file ./[set id].json
  */
 
 import { Prisma, PrismaClient } from "@prisma/client";
