@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 230 46% 10%;
+  --foreground: 0 0% 98%;
+  --primary: 238 83% 67%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 231 31% 20%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 231 24% 23%;
+  --muted-foreground: 0 0% 68%;
+  --border: 240 20% 31%;
+  --input: 232 28% 24%;
+  --ring: 238 83% 67%;
+}

@@ -5,6 +5,8 @@ import {
   CardSearchPanel,
   type SearchCard,
 } from "../components/CardSearchPanel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type InventoryType = "card" | "sealed" | "slab";
 type CardCondition = "NM" | "LP" | "MP" | "HP";
@@ -598,15 +600,11 @@ export const InventoryPage: FC = () => {
       </div>
 
       <div className="inventory-controls">
-        <button
-          type="button"
-          onClick={() => setShowAddModal(true)}
-          className="btn-primary"
-        >
+        <Button type="button" onClick={() => setShowAddModal(true)}>
           + Add Item
-        </button>
+        </Button>
 
-        <input
+        <Input
           type="text"
           className="search-input inventory-search-input"
           value={inventorySearch}
@@ -654,15 +652,15 @@ export const InventoryPage: FC = () => {
           </button>
         </div>
 
-        <button
+        <Button
           type="button"
-          className="btn-secondary"
+          variant="secondary"
           onClick={() => refreshAllPrices()}
           disabled={refreshingPrices}
           title="Fetch latest prices from TCGPlayer for all cards"
         >
           {refreshingPrices ? "Refreshing Prices..." : "Refresh Prices"}
-        </button>
+        </Button>
 
         <div className="since-export-controls">
           <input
@@ -671,15 +669,15 @@ export const InventoryPage: FC = () => {
             onChange={(e) => setPriceMovesSinceDate(e.target.value)}
             aria-label="Export price moves since date"
           />
-          <button
+          <Button
             type="button"
-            className="btn-secondary"
+            variant="secondary"
             onClick={() => void exportPriceMovesSince()}
             disabled={exportingSinceCsv}
             title="Export current inventory items that moved by at least $3 since selected date"
           >
             {exportingSinceCsv ? "Exporting..." : "Export Since Date CSV"}
-          </button>
+          </Button>
         </div>
 
         <div className="inventory-value">
@@ -987,22 +985,21 @@ export const InventoryPage: FC = () => {
               </label>
 
               <div className="modal-actions">
-                <button
+                <Button
                   type="button"
-                  className="btn-secondary"
+                  variant="secondary"
                   onClick={closeEditModal}
                   disabled={editSaving}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="btn-primary"
                   onClick={() => void saveEdits()}
                   disabled={editSaving}
                 >
                   {editSaving ? "Saving..." : "Save Changes"}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

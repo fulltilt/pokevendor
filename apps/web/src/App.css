@@ -2428,3 +2428,159 @@ body {
 .deal-expand-btn:hover {
   color: var(--text-primary);
 }
+
+@media (max-width: 900px) {
+  .navbar {
+    padding: 0.9rem 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .nav-title {
+    font-size: 1.2rem;
+  }
+
+  .nav-links {
+    width: 100%;
+    overflow-x: auto;
+    gap: 0.5rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .nav-btn {
+    white-space: nowrap;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.9rem;
+  }
+
+  .main-content {
+    padding: 1rem;
+  }
+
+  .context-panel {
+    padding: 1rem;
+  }
+
+  .field-group-wide {
+    grid-column: span 1;
+  }
+
+  .inventory-controls,
+  .deal-history-controls,
+  .analytics-filter-controls,
+  .time-analytics-controls,
+  .deal-active-header,
+  .deal-summary,
+  .new-deal-form,
+  .deal-active-header {
+    align-items: stretch;
+  }
+
+  .inventory-search-input {
+    margin-left: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .filter-buttons {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .since-export-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .since-export-controls input[type="date"],
+  .since-export-controls button {
+    width: 100%;
+  }
+
+  .deal-input-columns,
+  .deal-item-columns,
+  .deal-edit-items-section,
+  .deal-edit-header {
+    grid-template-columns: 1fr;
+  }
+
+  .deal-edit-footer,
+  .modal-footer,
+  .modal-actions,
+  .draft-deal-actions,
+  .pagination-controls {
+    flex-wrap: wrap;
+  }
+
+  .deal-actions-cell {
+    flex-wrap: wrap;
+  }
+
+  .inventory-table,
+  .deal-history-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  .inventory-table th,
+  .inventory-table td,
+  .deal-history-table th,
+  .deal-history-table td {
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+  }
+
+  .modal-content,
+  .modal {
+    width: min(96vw, 720px);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .main-content {
+    padding: 0.75rem;
+  }
+
+  .inventory-page h1,
+  .deal-tracker-page h1,
+  .deal-history-page h1 {
+    font-size: 1.35rem;
+  }
+
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .search-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-sort,
+  .search-input,
+  .btn-primary,
+  .btn-secondary,
+  .add-btn {
+    width: 100%;
+  }
+
+  .draft-deal-card,
+  .deal-summary,
+  .mobile-scan-actions,
+  .incoming-percentage-controls,
+  .cash-adjustment-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .edit-item-inline {
+    grid-template-columns: 1fr;
+  }
+}
