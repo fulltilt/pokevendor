@@ -29,13 +29,13 @@ console.log(xValues);
 Run the script in TCG Player (google "[set name] price guide") and sort by number. Remove the code card ids at the beginning. This is 
  */
 
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
 import { resolve } from "path";
 
 // Load .env from apps/api if DATABASE_URL not already set
 if (!process.env.DATABASE_URL) {
-  config({ path: resolve(import.meta.dirname, "../apps/api/.env") });
+  config({ path: resolve(process.cwd(), "apps/api/.env") });
 }
 
 interface SetConfig {
@@ -83,6 +83,10 @@ const deriveTcgPlayerId = (cardData: TcgDexLikeCard): string | null => {
   if (normalProductId) return normalProductId;
 
   return null;
+};
+
+const toPrismaJson = (value: unknown): Prisma.InputJsonValue => {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 };
 
 const normalizeCardData = (rawCardData: TcgDexLikeCard): TcgDexLikeCard => {
@@ -169,6 +173,7 @@ async function importSetCards(setId: string, cardCount: number) {
 
     try {
       const normalizedData = normalizeCardData(cardData as TcgDexLikeCard);
+      const normalizedDataJson = toPrismaJson(normalizedData);
       const normalizedTcgPlayerId = deriveTcgPlayerId(normalizedData);
 
       const existingCard = await prisma.card.findUnique({
@@ -177,7 +182,8 @@ async function importSetCards(setId: string, cardCount: number) {
 
       if (existingCard) {
         const shouldUpdateData =
-          JSON.stringify(existingCard.data) !== JSON.stringify(normalizedData);
+          JSON.stringify(existingCard.data) !==
+          JSON.stringify(normalizedDataJson);
         const shouldUpdateTcg =
           (existingCard.tcgPlayerId ?? null) !== normalizedTcgPlayerId;
 
@@ -190,7 +196,7 @@ async function importSetCards(setId: string, cardCount: number) {
         await prisma.card.update({
           where: { id: cardId },
           data: {
-            data: normalizedData,
+            data: normalizedDataJson,
             tcgPlayerId: normalizedTcgPlayerId,
           },
         });
@@ -203,7 +209,7 @@ async function importSetCards(setId: string, cardCount: number) {
       await prisma.card.create({
         data: {
           id: cardId,
-          data: normalizedData,
+          data: normalizedDataJson,
           tcgPlayerId: normalizedTcgPlayerId,
         },
       });
