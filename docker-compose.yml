@@ -48,7 +48,8 @@ services:
       - api
     volumes:
       - ./apps/web/src:/app/src
-    command: npm run dev
+      - ./apps/web/package.json:/app/package.json
+    command: sh -lc "npm install && npm run dev"
 
 volumes:
   postgres_data:
