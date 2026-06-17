@@ -2,12 +2,31 @@
 
 /**
  * Import cards from TCGDex API for specified sets
- * Usage: npx ts-node scripts/import-tcgdex-cards.ts me03 me04
+ * Usage: npx ts-node scripts/import-tcgdex-cards.ts [setname[:cardCount]] ...
+ *
+ * Examples:
+ * Import all cards from sets me03 and me04 using default counts:
+ *   npx ts-node scripts/import-tcgdex-cards.ts me03 me04
  * Or with explicit set info: npx ts-node scripts/import-tcgdex-cards.ts me03:124 me04:122
  *
  * Note:
  * get setId and set count from: https://api.tcgdex.net/v2/en/sets
  *
+ * 
+ * Get TCG Player ids
+-google "[set name] price guide" to get TCG Player set links
+
+const links = Array.from(document.querySelectorAll('a[href^="/product/"]'));
+const xValues = links
+  .map((link) => {
+    const match = link?.getAttribute("href")?.match(/^\/product\/([^/]+)\//);
+    return match ? match[1] : null;
+  })
+  .filter(Boolean) // Remove nulls
+  .filter((_, i) => i % 2 === 0);
+console.log(xValues);
+
+Run the script in TCG Player (google "[set name] price guide") and sort by number. Remove the code card ids at the beginning. This is 
  */
 
 import { PrismaClient } from "@prisma/client";

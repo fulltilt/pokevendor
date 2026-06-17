@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 
 /**
- * Sync tcgPlayerId values for cards in a set from a TCGPlayer price guide URL.
+ * Sync tcgPlayerId values for cards in a set from a manually extracted ID array.
  *
  * Usage:
- *   node --import tsx scripts/sync-tcgplayer-ids.ts --url <guideUrl> --set-id <setId>
+ *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id <setId> --ids "[1,2,3]"
+ *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id <setId> --ids-file ./ids.json
  *
  * Examples:
- *   node --import tsx scripts/sync-tcgplayer-ids.ts --url "https://www.tcgplayer.com/categories/trading-and-collectible-card-games/pokemon/price-guides/me02-phantasmal-flames" --set-id me02
- *   node --import tsx scripts/sync-tcgplayer-ids.ts --url "..." --set-id me02 --dry-run
- *   node --import tsx scripts/sync-tcgplayer-ids.ts --url "..." --set-id me02 --force
+ *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids "[123,456,789]"
+ *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids-file ./me02-ids.json --dry-run
+ *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids-file ./me02-ids.json --force
  */
 
 import { PrismaClient } from "@prisma/client";
 import { config } from "dotenv";
+import { readFileSync } from "node:fs";
 import { resolve } from "path";
 
 if (!process.env.DATABASE_URL) {
@@ -22,14 +24,11 @@ if (!process.env.DATABASE_URL) {
 
 type Candidate = {
   productId: string;
-  name: string | null;
-  number: string | null;
 };
 
 type CardRow = {
   id: string;
   tcgPlayerId: string | null;
-  data: unknown;
 };
 
 const prisma = new PrismaClient();
@@ -44,167 +43,34 @@ const toStringOrNull = (value: unknown): string | null => {
   return null;
 };
 
-const normalizeName = (name: string | null): string | null => {
-  if (!name) return null;
-  const normalized = name
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9 ]/g, "")
-    .trim();
-  return normalized || null;
+const cardSortNumber = (cardId: string): number => {
+  const suffix = cardId.split("-").pop() ?? "";
+  const digits = suffix.replace(/\D/g, "");
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 };
 
-const normalizeNumber = (num: string | null): string | null => {
-  if (!num) return null;
-  const firstSegment = num.split("/")[0]?.trim() ?? "";
-  const clean = firstSegment.replace(/[^a-zA-Z0-9]/g, "");
-  if (!clean) return null;
-
-  const parsed = Number.parseInt(clean, 10);
-  if (Number.isFinite(parsed)) {
-    return String(parsed);
+const loadCandidatesFromIds = (raw: unknown): Candidate[] => {
+  if (!Array.isArray(raw)) {
+    throw new Error("IDs input must be a JSON array.");
   }
 
-  return clean.toLowerCase();
-};
-
-const parseJsonSafe = (raw: string): unknown | null => {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-};
-
-const pickName = (obj: Record<string, unknown>): string | null => {
-  const nameKeys = [
-    "name",
-    "productName",
-    "cleanName",
-    "title",
-    "productTitle",
-  ];
-  for (const key of nameKeys) {
-    const v = toStringOrNull(obj[key]);
-    if (v) return v;
-  }
-  return null;
-};
-
-const pickNumber = (obj: Record<string, unknown>): string | null => {
-  const numberKeys = [
-    "number",
-    "cardNumber",
-    "localId",
-    "setNumber",
-    "collectorNumber",
-  ];
-  for (const key of numberKeys) {
-    const v = toStringOrNull(obj[key]);
-    if (v) return v;
-  }
-  return null;
-};
-
-const collectCandidatesFromNode = (
-  node: unknown,
-  out: Candidate[],
-  seen: Set<string>,
-): void => {
-  if (!node || typeof node !== "object") return;
-
-  if (Array.isArray(node)) {
-    for (const entry of node) {
-      collectCandidatesFromNode(entry, out, seen);
-    }
-    return;
-  }
-
-  const obj = node as Record<string, unknown>;
-
-  const productId =
-    toStringOrNull(obj.productId) ??
-    toStringOrNull(obj.productID) ??
-    toStringOrNull(obj.tcgplayerProductId) ??
-    toStringOrNull(obj.tcgPlayerId);
-
-  if (productId && /^\d+$/.test(productId)) {
-    const fingerprint = `${productId}::${toStringOrNull(obj.number) ?? ""}::${toStringOrNull(obj.name) ?? ""}`;
-    if (!seen.has(fingerprint)) {
-      out.push({
-        productId,
-        name: pickName(obj),
-        number: pickNumber(obj),
-      });
-      seen.add(fingerprint);
-    }
-  }
-
-  for (const value of Object.values(obj)) {
-    collectCandidatesFromNode(value, out, seen);
-  }
-};
-
-const extractCandidatesFromHtml = (html: string): Candidate[] => {
   const candidates: Candidate[] = [];
-  const seen = new Set<string>();
-
-  const nextDataMatch = html.match(
-    /<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (nextDataMatch?.[1]) {
-    const parsed = parseJsonSafe(nextDataMatch[1]);
-    if (parsed) {
-      collectCandidatesFromNode(parsed, candidates, seen);
+  for (let i = 0; i < raw.length; i++) {
+    const id = toStringOrNull(raw[i]);
+    if (!id || !/^\d+$/.test(id)) {
+      throw new Error(`Invalid TCGPlayer ID at index ${i}: ${String(raw[i])}`);
     }
-  }
-
-  const jsonScriptRegex =
-    /<script[^>]*type=["']application\/json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  for (const match of html.matchAll(jsonScriptRegex)) {
-    const payload = match[1] ?? "";
-    const parsed = parseJsonSafe(payload);
-    if (parsed) {
-      collectCandidatesFromNode(parsed, candidates, seen);
-    }
-  }
-
-  // Fallback for product URLs embedded in HTML. This may not include name/number.
-  const productUrlRegex = /\/product\/(\d+)\//gi;
-  for (const match of html.matchAll(productUrlRegex)) {
-    const productId = match[1];
-    const key = `${productId}::::`;
-    if (!seen.has(key)) {
-      candidates.push({ productId, name: null, number: null });
-      seen.add(key);
-    }
+    candidates.push({ productId: id });
   }
 
   return candidates;
 };
 
-const getCardNumberFromData = (data: unknown): string | null => {
-  if (!data || typeof data !== "object") return null;
-  const obj = data as Record<string, unknown>;
-
-  const directNumber = toStringOrNull(obj.number);
-  if (directNumber) return directNumber;
-
-  const localId = toStringOrNull(obj.localId);
-  if (localId) return localId;
-
-  return null;
-};
-
-const getCardNameFromData = (data: unknown): string | null => {
-  if (!data || typeof data !== "object") return null;
-  const obj = data as Record<string, unknown>;
-  return toStringOrNull(obj.name);
-};
-
 const parseArgs = (): {
-  url: string;
   setId: string;
+  idsJson: string | null;
+  idsFile: string | null;
   dryRun: boolean;
   force: boolean;
 } => {
@@ -216,53 +82,46 @@ const parseArgs = (): {
     return args[idx + 1] ?? null;
   };
 
-  const url = getValue("--url") ?? getValue("-u");
   const setId = getValue("--set-id") ?? getValue("-s");
+  const idsJson = getValue("--ids") ?? getValue("-i");
+  const idsFile = getValue("--ids-file") ?? getValue("-f");
   const dryRun = args.includes("--dry-run");
   const force = args.includes("--force");
 
-  if (!url || !setId) {
+  if (!setId || (!idsJson && !idsFile) || (idsJson && idsFile)) {
     console.error(
-      "Usage: node --import tsx scripts/sync-tcgplayer-ids.ts --url <guideUrl> --set-id <setId> [--dry-run] [--force]",
+      "Usage: node --import tsx scripts/sync-tcgplayer-ids.ts --set-id <setId> (--ids <jsonArray> | --ids-file <path>) [--dry-run] [--force]",
     );
     process.exit(1);
   }
 
-  return { url, setId, dryRun, force };
+  return { setId, idsJson, idsFile, dryRun, force };
 };
 
 const main = async () => {
-  const { url, setId, dryRun, force } = parseArgs();
+  const { setId, idsJson, idsFile, dryRun, force } = parseArgs();
 
-  console.log("Syncing TCGPlayer IDs from guide page");
+  console.log("Syncing TCGPlayer IDs from manual array");
   console.log(`Set ID: ${setId}`);
-  console.log(`Guide URL: ${url}`);
+  if (idsFile) {
+    console.log(`IDs Source: file (${idsFile})`);
+  } else {
+    console.log("IDs Source: inline JSON");
+  }
   console.log(
     `Mode: ${dryRun ? "dry-run" : "write"}${force ? " (force overwrite)" : ""}`,
   );
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch guide page: HTTP ${response.status}`);
-  }
-
-  const html = await response.text();
-  const candidates = extractCandidatesFromHtml(html);
-
-  if (candidates.length === 0) {
-    throw new Error(
-      "No product candidates found in the page. The guide payload may require a different endpoint or stronger anti-bot handling.",
+  let parsedIdsInput: unknown;
+  if (idsFile) {
+    parsedIdsInput = JSON.parse(
+      readFileSync(resolve(process.cwd(), idsFile), "utf8"),
     );
+  } else {
+    parsedIdsInput = JSON.parse(idsJson ?? "[]");
   }
-
-  console.log(`Extracted ${candidates.length} guide candidates`);
+  const candidates = loadCandidatesFromIds(parsedIdsInput);
+  console.log(`Loaded ${candidates.length} manual IDs`);
 
   const setPrefix = `${setId}-`;
   const cards = (await prisma.card.findMany({
@@ -274,7 +133,9 @@ const main = async () => {
     select: {
       id: true,
       tcgPlayerId: true,
-      data: true,
+    },
+    orderBy: {
+      id: "asc",
     },
   })) as CardRow[];
 
@@ -282,65 +143,33 @@ const main = async () => {
     throw new Error(`No cards found in DB for set prefix ${setPrefix}`);
   }
 
-  console.log(`Loaded ${cards.length} DB cards for set ${setId}`);
+  const sortedCards = [...cards].sort((a, b) => {
+    const diff = cardSortNumber(a.id) - cardSortNumber(b.id);
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id);
+  });
 
-  const numberIndex = new Map<string, CardRow[]>();
-  const nameIndex = new Map<string, CardRow[]>();
-
-  for (const card of cards) {
-    const n = normalizeNumber(getCardNumberFromData(card.data));
-    if (n) {
-      const arr = numberIndex.get(n) ?? [];
-      arr.push(card);
-      numberIndex.set(n, arr);
-    }
-
-    const nm = normalizeName(getCardNameFromData(card.data));
-    if (nm) {
-      const arr = nameIndex.get(nm) ?? [];
-      arr.push(card);
-      nameIndex.set(nm, arr);
-    }
+  if (sortedCards.length !== candidates.length) {
+    throw new Error(
+      `ID count mismatch for set ${setId}: expected ${sortedCards.length} but received ${candidates.length}`,
+    );
   }
 
-  let matched = 0;
   let updated = 0;
   let alreadySet = 0;
-  let ambiguous = 0;
-  let unmatched = 0;
+  let unchanged = 0;
 
-  for (const candidate of candidates) {
-    const cNumber = normalizeNumber(candidate.number);
-    const cName = normalizeName(candidate.name);
-
-    let target: CardRow | null = null;
-
-    if (cNumber) {
-      const byNumber = numberIndex.get(cNumber) ?? [];
-      if (byNumber.length === 1) {
-        target = byNumber[0];
-      } else if (byNumber.length > 1) {
-        ambiguous++;
-        continue;
-      }
-    }
-
-    if (!target && cName) {
-      const byName = nameIndex.get(cName) ?? [];
-      if (byName.length === 1) {
-        target = byName[0];
-      } else if (byName.length > 1) {
-        ambiguous++;
-        continue;
-      }
-    }
-
-    if (!target) {
-      unmatched++;
+  for (let i = 0; i < sortedCards.length; i++) {
+    const target = sortedCards[i];
+    const candidate = candidates[i];
+    if (!target || !candidate) {
       continue;
     }
 
-    matched++;
+    if (target.tcgPlayerId === candidate.productId) {
+      unchanged++;
+      continue;
+    }
 
     if (target.tcgPlayerId && !force) {
       alreadySet++;
@@ -358,11 +187,11 @@ const main = async () => {
   }
 
   console.log("\nDone.");
-  console.log(`Matched: ${matched}`);
+  console.log(`Cards in set: ${sortedCards.length}`);
+  console.log(`IDs provided: ${candidates.length}`);
   console.log(`Updated: ${updated}`);
+  console.log(`Unchanged: ${unchanged}`);
   console.log(`Already set (skipped): ${alreadySet}`);
-  console.log(`Ambiguous: ${ambiguous}`);
-  console.log(`Unmatched: ${unmatched}`);
 };
 
 main()
