@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FC } from "react";
 import axios from "axios";
 import {
@@ -56,6 +56,156 @@ interface EditingItem extends InventoryItem {
   purchasedFrom?: string;
 }
 
+interface PriceChangeSnapshot {
+  delta: number;
+  percent: number | null;
+}
+
+interface RefreshCsvRow {
+  name: string;
+  cardId: string;
+  condition: string;
+  previousPrice: number;
+  newPrice: number;
+  delta: number;
+  percent: number | null;
+}
+
+type ConditionPriceMap = {
+  nm: number | null;
+  lp: number | null;
+  mp: number | null;
+};
+
+const toCsvField = (value: string): string => {
+  const escaped = value.replace(/"/g, '""');
+  return `"${escaped}"`;
+};
+
+const buildPriceChangeCsv = (rows: RefreshCsvRow[]): string => {
+  const header = [
+    "Card",
+    "Card ID",
+    "Condition",
+    "Previous Price",
+    "New Price",
+    "Change",
+    "Percent Change",
+  ];
+
+  const body = rows.map((row) => [
+    toCsvField(row.name),
+    toCsvField(row.cardId),
+    toCsvField(row.condition),
+    row.previousPrice.toFixed(2),
+    row.newPrice.toFixed(2),
+    row.delta.toFixed(2),
+    row.percent == null ? "N/A" : `${row.percent.toFixed(2)}%`,
+  ]);
+
+  return [header.join(","), ...body.map((line) => line.join(","))].join("\n");
+};
+
+const downloadCsv = (filename: string, content: string): void => {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const plural = (count: number, singular: string, pluralWord: string): string =>
+  count === 1 ? singular : pluralWord;
+
+const formatPriceChange = (change: PriceChangeSnapshot): string => {
+  const deltaSign = change.delta >= 0 ? "+" : "";
+  const deltaText = `${deltaSign}$${change.delta.toFixed(2)}`;
+  let percentText = "N/A";
+  if (change.percent !== null) {
+    const percentSign = change.percent >= 0 ? "+" : "";
+    percentText = `${percentSign}${change.percent.toFixed(2)}%`;
+  }
+  return `${deltaText} (${percentText})`;
+};
+
+const fetchPricesForCardIds = async (
+  cardIds: string[],
+): Promise<Record<string, ConditionPriceMap | null>> => {
+  const pricesByCardId: Record<string, ConditionPriceMap | null> = {};
+
+  for (const cardId of cardIds) {
+    try {
+      const priceRes = await axios.get<{
+        prices: ConditionPriceMap | null;
+      }>(`/api/cards/${cardId}/prices`);
+      pricesByCardId[cardId] = priceRes.data.prices ?? null;
+    } catch (error) {
+      console.error(`Failed to fetch price for card ${cardId}:`, error);
+      pricesByCardId[cardId] = null;
+    }
+  }
+
+  return pricesByCardId;
+};
+
+const refreshCardItems = async (
+  cardItems: InventoryItem[],
+  pricesByCardId: Record<string, ConditionPriceMap | null>,
+): Promise<{
+  updatedCount: number;
+  latestChangesById: Record<string, PriceChangeSnapshot>;
+  csvRows: RefreshCsvRow[];
+}> => {
+  const latestChangesById: Record<string, PriceChangeSnapshot> = {};
+  const csvRows: RefreshCsvRow[] = [];
+  let updatedCount = 0;
+
+  for (const item of cardItems) {
+    const prices = pricesByCardId[item.cardId];
+    if (!prices) {
+      continue;
+    }
+
+    const normalizedCondition = normalizeCardCondition(item.condition);
+    const newPrice = pickPriceByCondition(prices, normalizedCondition);
+    if (newPrice === null) {
+      continue;
+    }
+
+    const previousPrice = toFiniteNumber(item.priceCurrentAsk, 0);
+    const delta = newPrice - previousPrice;
+    const percent = previousPrice > 0 ? (delta / previousPrice) * 100 : null;
+
+    try {
+      await axios.patch(`/api/inventory/${item.id}`, {
+        priceCurrentAsk: newPrice,
+      });
+      updatedCount += 1;
+      latestChangesById[item.id] = { delta, percent };
+
+      if (Math.abs(delta) >= 3) {
+        csvRows.push({
+          name: item.notes || item.card?.data?.name || item.cardId,
+          cardId: item.cardId,
+          condition: normalizedCondition,
+          previousPrice,
+          newPrice,
+          delta,
+          percent,
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to update price for item ${item.id}:`, error);
+    }
+  }
+
+  return { updatedCount, latestChangesById, csvRows };
+};
+
 export const InventoryPage: FC = () => {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [filterStorageType, setFilterStorageType] = useState<
@@ -87,6 +237,7 @@ export const InventoryPage: FC = () => {
   const [editCurrentAsk, setEditCurrentAsk] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
+  const [exportingSinceCsv, setExportingSinceCsv] = useState(false);
   const [manualItemName, setManualItemName] = useState("");
   const [isAddingManual, setIsAddingManual] = useState(false);
   const [editManualItemName, setEditManualItemName] = useState("");
@@ -98,6 +249,14 @@ export const InventoryPage: FC = () => {
   type InventorySortBy = "condition" | "priceCurrentAsk" | "totalValue" | null;
   const [sortBy, setSortBy] = useState<InventorySortBy>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [priceChangeByItemId, setPriceChangeByItemId] = useState<
+    Record<string, PriceChangeSnapshot>
+  >({});
+  const [priceMovesSinceDate, setPriceMovesSinceDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
 
   const handleSort = (col: NonNullable<InventorySortBy>) => {
     if (sortBy === col) {
@@ -132,21 +291,32 @@ export const InventoryPage: FC = () => {
     setManualItemName("");
   };
 
+  const buildInventoryQueryParams = useCallback(
+    (
+      customPage: number,
+      customLimit = pageSize,
+    ): Record<string, string | number> => {
+      const params: Record<string, string | number> =
+        filterStorageType === "all" ? {} : { storageType: filterStorageType };
+      params.limit = customLimit;
+      params.offset = (customPage - 1) * customLimit;
+      if (inventorySearch.trim()) {
+        params.q = inventorySearch.trim();
+      }
+      if (sortBy) {
+        params.sortBy = sortBy;
+        params.sortDir = sortDir;
+      }
+      return params;
+    },
+    [filterStorageType, inventorySearch, sortBy, sortDir],
+  );
+
   useEffect(() => {
     const loadInventory = async () => {
       setLoading(true);
       try {
-        const params: Record<string, string | number> =
-          filterStorageType === "all" ? {} : { storageType: filterStorageType };
-        params.limit = pageSize;
-        params.offset = (page - 1) * pageSize;
-        if (inventorySearch.trim()) {
-          params.q = inventorySearch.trim();
-        }
-        if (sortBy) {
-          params.sortBy = sortBy;
-          params.sortDir = sortDir;
-        }
+        const params = buildInventoryQueryParams(page);
         const response = await axios.get("/api/inventory", { params });
         setItems(response.data.items);
         setTotalValue(response.data.totalValue);
@@ -159,20 +329,10 @@ export const InventoryPage: FC = () => {
     };
 
     void loadInventory();
-  }, [filterStorageType, page, sortBy, sortDir, inventorySearch]);
+  }, [buildInventoryQueryParams, page]);
 
   const reloadInventory = async () => {
-    const params: Record<string, string | number> =
-      filterStorageType === "all" ? {} : { storageType: filterStorageType };
-    params.limit = pageSize;
-    params.offset = (page - 1) * pageSize;
-    if (inventorySearch.trim()) {
-      params.q = inventorySearch.trim();
-    }
-    if (sortBy) {
-      params.sortBy = sortBy;
-      params.sortDir = sortDir;
-    }
+    const params = buildInventoryQueryParams(page);
     const response = await axios.get("/api/inventory", { params });
     setItems(response.data.items);
     setTotalValue(response.data.totalValue);
@@ -195,13 +355,12 @@ export const InventoryPage: FC = () => {
     setEditItemType(item.type ?? "card");
     setEditCondition(normalizeCardCondition(item.condition));
     setEditPurchasePrice(String(toFiniteNumber(item.pricePurchasedAt)));
-    setEditCurrentAsk(
-      String(
-        item.priceCurrentAsk != null
-          ? toFiniteNumber(item.priceCurrentAsk)
-          : toFiniteNumber(item.pricePurchasedAt),
-      ),
-    );
+    const hasCurrentAskValue =
+      item.priceCurrentAsk !== null && item.priceCurrentAsk !== undefined;
+    const nextCurrentAsk = hasCurrentAskValue
+      ? toFiniteNumber(item.priceCurrentAsk)
+      : toFiniteNumber(item.pricePurchasedAt);
+    setEditCurrentAsk(String(nextCurrentAsk));
     setEditManualItemName(item.notes || "");
   };
 
@@ -236,75 +395,95 @@ export const InventoryPage: FC = () => {
   };
 
   const refreshAllPrices = async () => {
-    if (!items.length) {
-      setInventoryNotice("No items to refresh.");
-      return;
-    }
-
     setRefreshingPrices(true);
     setInventoryNotice(null);
 
     try {
+      const allItemsResponse = await axios.get<{
+        items: InventoryItem[];
+        total: number;
+      }>("/api/inventory", {
+        params: buildInventoryQueryParams(1, 2000),
+      });
+      const allVisibleItems = allItemsResponse.data.items ?? [];
+
+      if (!allVisibleItems.length) {
+        setInventoryNotice("No items to refresh.");
+        return;
+      }
+
       // Only refresh card-type items; skip sealed/slab
-      const cardItems = items.filter(
+      const cardItems = allVisibleItems.filter(
         (item) => (item.type ?? "card") === "card",
       );
+
+      if (!cardItems.length) {
+        setInventoryNotice("No card-type items found to refresh.");
+        return;
+      }
 
       // Fetch prices once per unique cardId, store the full price map
       const uniqueCardIds = Array.from(
         new Set(cardItems.map((item) => item.cardId)),
       );
 
-      const pricesByCardId: Record<
-        string,
-        { nm: number | null; lp: number | null; mp: number | null } | null
-      > = {};
-
-      for (const cardId of uniqueCardIds) {
-        try {
-          const priceRes = await axios.get<{
-            prices: {
-              nm: number | null;
-              lp: number | null;
-              mp: number | null;
-            } | null;
-          }>(`/api/cards/${cardId}/prices`);
-          pricesByCardId[cardId] = priceRes.data.prices ?? null;
-        } catch (error) {
-          console.error(`Failed to fetch price for card ${cardId}:`, error);
-          pricesByCardId[cardId] = null;
-        }
-      }
-
-      // Update each item using its own condition against the fetched price map
-      let updatedCount = 0;
-      for (const item of cardItems) {
-        const prices = pricesByCardId[item.cardId];
-        if (!prices) continue;
-
-        const normalizedCondition = normalizeCardCondition(item.condition);
-        const newPrice = pickPriceByCondition(prices, normalizedCondition);
-        if (newPrice === null) continue;
-
-        try {
-          await axios.patch(`/api/inventory/${item.id}`, {
-            priceCurrentAsk: newPrice,
-          });
-          updatedCount++;
-        } catch (error) {
-          console.error(`Failed to update price for item ${item.id}:`, error);
-        }
-      }
+      const pricesByCardId = await fetchPricesForCardIds(uniqueCardIds);
+      const { updatedCount, latestChangesById, csvRows } =
+        await refreshCardItems(cardItems, pricesByCardId);
 
       await reloadInventory();
+      setPriceChangeByItemId(latestChangesById);
+
+      const csvCount = csvRows.length;
+      if (csvCount > 0) {
+        const csv = buildPriceChangeCsv(csvRows);
+        const dateTag = new Date().toISOString().slice(0, 10);
+        downloadCsv(`price-moves-${dateTag}.csv`, csv);
+      }
+
+      const itemWord = plural(updatedCount, "item", "items");
+      const cardWord = plural(uniqueCardIds.length, "card", "cards");
+      const changeWord = plural(csvCount, "change", "changes");
       setInventoryNotice(
-        `Refreshed prices for ${updatedCount} item${updatedCount !== 1 ? "s" : ""} (${uniqueCardIds.length} unique card${uniqueCardIds.length !== 1 ? "s" : ""}).`,
+        `Refreshed prices for ${updatedCount} ${itemWord} (${uniqueCardIds.length} unique ${cardWord}). Exported ${csvCount} ${changeWord} with absolute moves >= $3.`,
       );
     } catch (error) {
       console.error("Failed to refresh prices:", error);
       setInventoryNotice("Failed to refresh prices.");
     } finally {
       setRefreshingPrices(false);
+    }
+  };
+
+  const exportPriceMovesSince = async () => {
+    if (!priceMovesSinceDate) {
+      setInventoryNotice("Pick a since date first.");
+      return;
+    }
+
+    setExportingSinceCsv(true);
+    setInventoryNotice(null);
+    try {
+      const response = await axios.get("/api/inventory/price-moves/export", {
+        params: {
+          since: priceMovesSinceDate,
+          threshold: 3,
+        },
+        responseType: "text",
+      });
+
+      downloadCsv(
+        `price-moves-since-${priceMovesSinceDate}.csv`,
+        String(response.data ?? ""),
+      );
+      setInventoryNotice(
+        `Exported price moves since ${priceMovesSinceDate} (threshold: $3).`,
+      );
+    } catch (error) {
+      console.error("Failed to export price moves since date:", error);
+      setInventoryNotice("Failed to export since-date price moves.");
+    } finally {
+      setExportingSinceCsv(false);
     }
   };
 
@@ -485,6 +664,24 @@ export const InventoryPage: FC = () => {
           {refreshingPrices ? "Refreshing Prices..." : "Refresh Prices"}
         </button>
 
+        <div className="since-export-controls">
+          <input
+            type="date"
+            value={priceMovesSinceDate}
+            onChange={(e) => setPriceMovesSinceDate(e.target.value)}
+            aria-label="Export price moves since date"
+          />
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void exportPriceMovesSince()}
+            disabled={exportingSinceCsv}
+            title="Export current inventory items that moved by at least $3 since selected date"
+          >
+            {exportingSinceCsv ? "Exporting..." : "Export Since Date CSV"}
+          </button>
+        </div>
+
         <div className="inventory-value">
           Total Value: <strong>${toFiniteNumber(totalValue).toFixed(2)}</strong>
           {totalCount > 0 && (
@@ -530,6 +727,7 @@ export const InventoryPage: FC = () => {
                 >
                   Total Value{sortArrow("totalValue")}
                 </th>
+                <th>Change</th>
                 <th></th>
               </tr>
             </thead>
@@ -541,6 +739,15 @@ export const InventoryPage: FC = () => {
                     -1,
                   );
                   const hasCurrentAsk = priceCurrentAsk >= 0;
+                  const change = priceChangeByItemId[item.id];
+                  let changeClass = "";
+                  if (change) {
+                    if (change.delta > 0) {
+                      changeClass = "price-change-up";
+                    } else if (change.delta < 0) {
+                      changeClass = "price-change-down";
+                    }
+                  }
                   return (
                     <tr key={item.id}>
                       <td className="inventory-image-cell">
@@ -588,6 +795,9 @@ export const InventoryPage: FC = () => {
                             : toFiniteNumber(item.pricePurchasedAt)) *
                           item.quantity
                         ).toFixed(2)}
+                      </td>
+                      <td className={changeClass}>
+                        {change ? formatPriceChange(change) : "--"}
                       </td>
                       <td>
                         <button

@@ -678,6 +678,20 @@ body {
   margin-left: auto;
 }
 
+.since-export-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.since-export-controls input[type="date"] {
+  padding: 0.5rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .filter-buttons {
   display: flex;
   gap: 0.5rem;
@@ -748,6 +762,16 @@ body {
 
 .inventory-table tbody tr:hover {
   background-color: var(--bg-tertiary);
+}
+
+.price-change-up {
+  color: #1b8f4b;
+  font-weight: 600;
+}
+
+.price-change-down {
+  color: #c13535;
+  font-weight: 600;
 }
 
 .sortable-th {
