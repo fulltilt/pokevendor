@@ -9,6 +9,7 @@
     "db:migrate": "npm run db:migrate -w apps/api",
     "db:push": "npm run db:push -w apps/api",
     "db:seed": "npm run db:seed -w apps/api",
+    "sync:tcgplayer-ids": "node --import tsx scripts/sync-tcgplayer-ids.ts",
     "db:backup": "./scripts/backup-db.sh",
     "db:restore": "./scripts/restore-db.sh"
   },
