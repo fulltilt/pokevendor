@@ -1,49 +1,58 @@
 import { useState } from "react";
 import "./App.css";
+import { cn } from "./lib/utils";
 import { InventoryPage } from "./pages/InventoryPage";
 import { DealTrackerPage } from "./pages/DealTrackerPage";
 import { DealHistoryPage } from "./pages/DealHistoryPage";
 
 type Page = "inventory" | "deals" | "history";
 
+const pages: Array<{ id: Page; label: string }> = [
+  { id: "inventory", label: "Inventory" },
+  { id: "deals", label: "Deal Tracker" },
+  { id: "history", label: "Deal History" },
+];
+
 export const App = () => {
   const [currentPage, setCurrentPage] = useState<Page>("inventory");
 
   return (
-    <div className="app-shell">
-      <div className="app">
-        <nav className="navbar">
-          <div className="nav-brand">
-            <span className="nav-eyebrow">Inventory and deal desk</span>
-            <div className="nav-title">PokeVendor</div>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(242,181,68,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(45,140,155,0.22),transparent_24%),linear-gradient(180deg,#08161d_0%,#07141b_42%,#0b1d25_100%)] p-0 sm:p-3 lg:p-6">
+      <div className="min-h-screen overflow-hidden border-y border-white/8 bg-[linear-gradient(180deg,rgba(16,42,53,0.92),rgba(8,24,31,0.96)),rgba(10,18,23,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-[18px] sm:min-h-[calc(100vh-24px)] sm:rounded-[22px] sm:border sm:border-white/7 lg:min-h-[calc(100vh-48px)] lg:rounded-[28px]">
+        <nav className="flex flex-col gap-3 border-b border-[rgba(157,180,186,0.22)] bg-[linear-gradient(135deg,rgba(242,181,68,0.08),transparent_35%),rgba(8,22,28,0.82)] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-hover)]">
+              Inventory and deal desk
+            </span>
+            <div className="text-[1.45rem] font-extrabold tracking-[0.04em] text-[var(--text-primary)] sm:text-[1.7rem]">
+              PokeVendor
+            </div>
           </div>
-          <div className="nav-links">
-            <button
-              type="button"
-              className={`nav-btn ${currentPage === "inventory" ? "active" : ""}`}
-              onClick={() => setCurrentPage("inventory")}
-            >
-              Inventory
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${currentPage === "deals" ? "active" : ""}`}
-              onClick={() => setCurrentPage("deals")}
-            >
-              Deal Tracker
-            </button>
-            <button
-              type="button"
-              className={`nav-btn ${currentPage === "history" ? "active" : ""}`}
-              onClick={() => setCurrentPage("history")}
-            >
-              Deal History
-            </button>
+          <div className="flex w-full gap-2 overflow-x-auto rounded-full border border-white/6 bg-white/4 p-1 lg:w-auto">
+            {pages.map((page) => {
+              const isActive = currentPage === page.id;
+
+              return (
+                <button
+                  key={page.id}
+                  type="button"
+                  className={cn(
+                    "whitespace-nowrap rounded-full border px-4 py-2.5 text-sm font-bold tracking-[0.02em] transition duration-200",
+                    isActive
+                      ? "border-white/20 bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_10px_30px_rgba(242,181,68,0.22)]"
+                      : "border-transparent bg-transparent text-[var(--text-secondary)] hover:border-white/8 hover:bg-white/6 hover:text-[var(--text-primary)]",
+                  )}
+                  onClick={() => setCurrentPage(page.id)}
+                >
+                  {page.label}
+                </button>
+              );
+            })}
           </div>
         </nav>
 
-        <main className="main-content">
-          <div className="main-frame">
+        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
+          <div className="mx-auto w-full max-w-[1440px]">
             {currentPage === "inventory" && <InventoryPage />}
             {currentPage === "deals" && <DealTrackerPage />}
             {currentPage === "history" && <DealHistoryPage />}
