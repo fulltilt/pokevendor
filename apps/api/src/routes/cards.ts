@@ -1,9 +1,17 @@
 import { Router, type Request, type Response } from "express";
 import { Prisma, PrismaClient } from "@prisma/client";
 import axios from "axios";
+import sharp from "sharp";
+import multer from "multer";
 
 const router = Router();
 const prisma = new PrismaClient();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
 
 type ConditionKey = "nm" | "lp" | "mp";
 type PriceMap = Record<ConditionKey, number | null>;
@@ -83,6 +91,193 @@ const parseLivePrices = (payload: unknown): PriceMap => {
 const hasAnyPrice = (prices: PriceMap): boolean =>
   prices.nm !== null || prices.lp !== null || prices.mp !== null;
 
+type RecognizeBody = {
+  imageUrl?: unknown;
+  topK?: unknown;
+  setId?: unknown;
+};
+
+const toImageUrl = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  return trimmed;
+};
+
+const toPositiveInt = (
+  value: unknown,
+  fallback: number,
+  max: number,
+): number => {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, max);
+};
+
+const loadGrayscalePixels = async (
+  imageInput: Buffer,
+  width: number,
+  height: number,
+): Promise<Uint8Array> => {
+  const output = await sharp(imageInput)
+    .rotate()
+    .grayscale()
+    .resize(width, height, { fit: "fill" })
+    .raw()
+    .toBuffer();
+
+  return output;
+};
+
+const loadImageBufferFromUrl = async (imageUrl: string): Promise<Buffer> => {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download image (HTTP ${response.status})`);
+  }
+
+  const arrBuf = await response.arrayBuffer();
+  return Buffer.from(arrBuf);
+};
+
+const parseOptionalText = (value: unknown): string => {
+  if (typeof value !== "string") return "";
+  return value.trim();
+};
+
+type RecognitionInput = {
+  imageBuffer: Buffer;
+  source: "upload" | "url";
+  imageUrl: string | null;
+};
+
+const resolveRecognitionInput = async (
+  req: Request,
+  body: RecognizeBody,
+): Promise<RecognitionInput> => {
+  const uploadedFile = req.file;
+  if (uploadedFile?.buffer && uploadedFile.buffer.length > 0) {
+    if (uploadedFile.mimetype && !uploadedFile.mimetype.startsWith("image/")) {
+      throw new Error("Uploaded file must be an image.");
+    }
+
+    return {
+      imageBuffer: uploadedFile.buffer,
+      source: "upload",
+      imageUrl: null,
+    };
+  }
+
+  const imageUrl = toImageUrl(body.imageUrl);
+  if (!imageUrl) {
+    throw new Error(
+      "Provide either multipart image field 'image' or JSON body imageUrl.",
+    );
+  }
+
+  const imageBuffer = await loadImageBufferFromUrl(imageUrl);
+  return {
+    imageBuffer,
+    source: "url",
+    imageUrl,
+  };
+};
+
+const dhash64 = (pixels: Uint8Array): string => {
+  const width = 9;
+  const height = 8;
+  if (pixels.length !== width * height) {
+    throw new Error("dhash64 expects 9x8 grayscale pixels.");
+  }
+
+  let hash = "";
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const left = pixels[y * width + x] ?? 0;
+      const right = pixels[y * width + x + 1] ?? 0;
+      hash += left > right ? "1" : "0";
+    }
+  }
+  return hash;
+};
+
+const dct2d = (matrix: number[][]): number[][] => {
+  const n = matrix.length;
+  const result: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+
+  const c = (index: number) =>
+    index === 0 ? Math.sqrt(1 / n) : Math.sqrt(2 / n);
+
+  for (let u = 0; u < n; u++) {
+    for (let v = 0; v < n; v++) {
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          sum +=
+            (matrix[i]?.[j] ?? 0) *
+            Math.cos(((2 * i + 1) * u * Math.PI) / (2 * n)) *
+            Math.cos(((2 * j + 1) * v * Math.PI) / (2 * n));
+        }
+      }
+      result[u][v] = c(u) * c(v) * sum;
+    }
+  }
+
+  return result;
+};
+
+const phash64 = (pixels: Uint8Array): string => {
+  const width = 32;
+  const height = 32;
+  if (pixels.length !== width * height) {
+    throw new Error("phash64 expects 32x32 grayscale pixels.");
+  }
+
+  const matrix: number[][] = [];
+  for (let y = 0; y < height; y++) {
+    const row: number[] = [];
+    for (let x = 0; x < width; x++) {
+      row.push(pixels[y * width + x] ?? 0);
+    }
+    matrix.push(row);
+  }
+
+  const dct = dct2d(matrix);
+  const coeffs: number[] = [];
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      if (x === 0 && y === 0) continue;
+      coeffs.push(dct[y]?.[x] ?? 0);
+    }
+  }
+
+  const sorted = [...coeffs].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
+
+  let hash = "";
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      if (x === 0 && y === 0) {
+        hash += "0";
+        continue;
+      }
+      const value = dct[y]?.[x] ?? 0;
+      hash += value > median ? "1" : "0";
+    }
+  }
+
+  return hash;
+};
+
+const hammingDistance = (a: string, b: string): number => {
+  const len = Math.min(a.length, b.length);
+  let diff = Math.abs(a.length - b.length);
+  for (let i = 0; i < len; i++) {
+    if (a[i] !== b[i]) diff += 1;
+  }
+  return diff;
+};
+
 const getFallbackPricesFromDb = async (cardId: string): Promise<PriceMap> => {
   const latest = await prisma.priceEntry.findFirst({
     where: { cardId },
@@ -101,6 +296,149 @@ const getFallbackPricesFromDb = async (cardId: string): Promise<PriceMap> => {
     mp: null,
   };
 };
+
+// Stage 1 image recognition MVP: hash photo URL and return nearest cards.
+router.post(
+  "/recognize",
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as RecognizeBody;
+      const topK = toPositiveInt(body.topK, 20, 100);
+      const setId = parseOptionalText(body.setId);
+      const recognitionInput = await resolveRecognitionInput(req, body);
+
+      const dhPixels = await loadGrayscalePixels(
+        recognitionInput.imageBuffer,
+        9,
+        8,
+      );
+      const phPixels = await loadGrayscalePixels(
+        recognitionInput.imageBuffer,
+        32,
+        32,
+      );
+      const queryDHash = dhash64(dhPixels);
+      const queryPHash = phash64(phPixels);
+
+      const hashRows = await prisma.cardHash.findMany({
+        where: {
+          variant: "v1-64",
+          algorithm: { in: ["phash", "dhash"] },
+          ...(setId ? { cardId: { startsWith: `${setId}-` } } : {}),
+        },
+        select: {
+          cardId: true,
+          algorithm: true,
+          hash: true,
+        },
+      });
+
+      const byCard = new Map<
+        string,
+        { phash: string | null; dhash: string | null }
+      >();
+
+      for (const row of hashRows) {
+        const current = byCard.get(row.cardId) ?? { phash: null, dhash: null };
+        if (row.algorithm === "phash") {
+          current.phash = row.hash;
+        } else if (row.algorithm === "dhash") {
+          current.dhash = row.hash;
+        }
+        byCard.set(row.cardId, current);
+      }
+
+      const scored = [...byCard.entries()].map(([cardId, hashes]) => {
+        const pDist = hashes.phash
+          ? hammingDistance(queryPHash, hashes.phash)
+          : 64;
+        const dDist = hashes.dhash
+          ? hammingDistance(queryDHash, hashes.dhash)
+          : 64;
+
+        return {
+          cardId,
+          pDist,
+          dDist,
+          score: pDist + dDist,
+        };
+      });
+
+      scored.sort((a, b) => a.score - b.score);
+      const top = scored.slice(0, topK);
+
+      const cardIds = top.map((row) => row.cardId);
+      const cards = await prisma.card.findMany({
+        where: { id: { in: cardIds } },
+        select: { id: true, data: true },
+      });
+
+      const cardMap = new Map(cards.map((card) => [card.id, card]));
+
+      const matches = top.map((row) => {
+        const card = cardMap.get(row.cardId);
+        const data = card?.data as
+          | {
+              name?: unknown;
+              number?: unknown;
+              localId?: unknown;
+              images?: { small?: unknown; large?: unknown };
+            }
+          | undefined;
+
+        return {
+          cardId: row.cardId,
+          name: typeof data?.name === "string" ? data.name : null,
+          number:
+            typeof data?.number === "string"
+              ? data.number
+              : typeof data?.localId === "string"
+                ? data.localId
+                : null,
+          image:
+            typeof data?.images?.small === "string"
+              ? data.images.small
+              : typeof data?.images?.large === "string"
+                ? data.images.large
+                : null,
+          distances: {
+            phash: row.pDist,
+            dhash: row.dDist,
+            total: row.score,
+          },
+        };
+      });
+
+      return res.json({
+        query: {
+          source: recognitionInput.source,
+          imageUrl: recognitionInput.imageUrl,
+          setId: setId || null,
+          topK,
+          hashes: {
+            phash: queryPHash,
+            dhash: queryDHash,
+          },
+        },
+        scannedCards: byCard.size,
+        matches,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Recognition failed";
+      if (message.includes("Provide either multipart image")) {
+        return res.status(400).json({ error: message });
+      }
+      if (message.includes("Uploaded file must be an image.")) {
+        return res.status(400).json({ error: message });
+      }
+
+      console.error("Recognize failed:", error);
+      return res.status(500).json({ error: "Recognition failed" });
+    }
+  },
+);
 
 // Search cards by name/ID
 router.get("/search", async (req: Request, res: Response) => {
