@@ -10,7 +10,6 @@
  * Examples:
  *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids "[123,456,789]"
  *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids-file ./me02-ids.json --dry-run
- *   node --import tsx scripts/sync-tcgplayer-ids.ts --set-id me02 --ids-file ./me02-ids.json --force
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -72,7 +71,6 @@ const parseArgs = (): {
   idsJson: string | null;
   idsFile: string | null;
   dryRun: boolean;
-  force: boolean;
 } => {
   const args = process.argv.slice(2);
 
@@ -86,20 +84,19 @@ const parseArgs = (): {
   const idsJson = getValue("--ids") ?? getValue("-i");
   const idsFile = getValue("--ids-file") ?? getValue("-f");
   const dryRun = args.includes("--dry-run");
-  const force = args.includes("--force");
 
   if (!setId || (!idsJson && !idsFile) || (idsJson && idsFile)) {
     console.error(
-      "Usage: node --import tsx scripts/sync-tcgplayer-ids.ts --set-id <setId> (--ids <jsonArray> | --ids-file <path>) [--dry-run] [--force]",
+      "Usage: node --import tsx scripts/sync-tcgplayer-ids.ts --set-id <setId> (--ids <jsonArray> | --ids-file <path>) [--dry-run]",
     );
     process.exit(1);
   }
 
-  return { setId, idsJson, idsFile, dryRun, force };
+  return { setId, idsJson, idsFile, dryRun };
 };
 
 const main = async () => {
-  const { setId, idsJson, idsFile, dryRun, force } = parseArgs();
+  const { setId, idsJson, idsFile, dryRun } = parseArgs();
 
   console.log("Syncing TCGPlayer IDs from manual array");
   console.log(`Set ID: ${setId}`);
@@ -108,9 +105,7 @@ const main = async () => {
   } else {
     console.log("IDs Source: inline JSON");
   }
-  console.log(
-    `Mode: ${dryRun ? "dry-run" : "write"}${force ? " (force overwrite)" : ""}`,
-  );
+  console.log(`Mode: ${dryRun ? "dry-run" : "write"}`);
 
   let parsedIdsInput: unknown;
   if (idsFile) {
@@ -156,7 +151,6 @@ const main = async () => {
   }
 
   let updated = 0;
-  let alreadySet = 0;
   let unchanged = 0;
 
   for (let i = 0; i < sortedCards.length; i++) {
@@ -168,11 +162,6 @@ const main = async () => {
 
     if (target.tcgPlayerId === candidate.productId) {
       unchanged++;
-      continue;
-    }
-
-    if (target.tcgPlayerId && !force) {
-      alreadySet++;
       continue;
     }
 
@@ -191,7 +180,6 @@ const main = async () => {
   console.log(`IDs provided: ${candidates.length}`);
   console.log(`Updated: ${updated}`);
   console.log(`Unchanged: ${unchanged}`);
-  console.log(`Already set (skipped): ${alreadySet}`);
 };
 
 main()
