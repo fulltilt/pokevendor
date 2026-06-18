@@ -75,7 +75,11 @@ Expected outcome:
 
 ## Step 2: Backfill hashes from image URLs (dry run first)
 
-Command (dry-run):
+Command (dry-run, single set):
+
+    npm run hash:cards -- --set-id me03 --prefer small --dry-run
+
+Command (dry-run, batch without set filter):
 
     npm run hash:cards -- --dry-run --limit 200 --offset 0 --prefer small --concurrency 8
 
@@ -90,6 +94,11 @@ What this does:
 
 ## Step 3: Write hashes to database
 
+Command (single set — recommended for first run):
+
+    npm run hash:cards -- --set-id me03 --prefer small --concurrency 8
+    npm run hash:cards -- --set-id me04 --prefer small --concurrency 8
+
 Command (all cards):
 
     npm run hash:cards -- --all --prefer small --concurrency 8
@@ -98,6 +107,18 @@ Optional single-card test:
 
     npm run hash:cards -- --card-id me03-001 --prefer small --dry-run
     npm run hash:cards -- --card-id me03-001 --prefer small
+
+Flags summary:
+
+| Flag                  | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| --set-id me03         | Only hash cards whose id starts with me03-          |
+| --all                 | Hash every card in the database                     |
+| --card-id me03-001    | Hash a single card                                  |
+| --limit / --offset    | Batch mode when no set-id, all, or card-id is given |
+| --prefer small\|large | Which image size to download (default: small)       |
+| --concurrency N       | Parallel download workers, 1–64 (default: 8)        |
+| --dry-run             | Compute hashes but do not write to DB               |
 
 Expected database writes:
 
@@ -108,6 +129,7 @@ Expected database writes:
 Note:
 
 - Backfill upserts by deleting old v1-64 phash/dhash rows per card then recreating them.
+- When --set-id is given, --limit and --offset are ignored (all matching cards are processed).
 
 ## Step 4: Test recognition shortlist
 

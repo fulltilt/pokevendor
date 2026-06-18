@@ -17,6 +17,7 @@ type CliOptions = {
   dryRun: boolean;
   all: boolean;
   cardId: string | null;
+  setId: string | null;
 };
 
 type CardRow = {
@@ -45,6 +46,7 @@ const parseArgs = (): CliOptions => {
   const offset = Number.parseInt(valueFor("--offset") ?? "0", 10);
   const concurrency = Number.parseInt(valueFor("--concurrency") ?? "8", 10);
   const cardId = valueFor("--card-id");
+  const setId = valueFor("--set-id");
   const dryRun = args.includes("--dry-run");
   const all = args.includes("--all");
 
@@ -69,6 +71,7 @@ const parseArgs = (): CliOptions => {
     dryRun,
     all,
     cardId,
+    setId,
   };
 };
 
@@ -275,13 +278,22 @@ const main = async () => {
   if (opts.cardId) {
     console.log(`Single card mode: ${opts.cardId}`);
   }
+  if (opts.setId) {
+    console.log(`Set filter: ${opts.setId}`);
+  }
+
+  const where = opts.cardId
+    ? { id: opts.cardId }
+    : opts.setId
+      ? { id: { startsWith: `${opts.setId}-` } }
+      : undefined;
 
   const cards = (await prisma.card.findMany({
-    where: opts.cardId ? { id: opts.cardId } : undefined,
+    where,
     select: { id: true, data: true },
     orderBy: { id: "asc" },
-    take: opts.cardId || opts.all ? undefined : opts.limit,
-    skip: opts.cardId ? undefined : opts.offset,
+    take: opts.cardId || opts.setId || opts.all ? undefined : opts.limit,
+    skip: opts.cardId || opts.setId ? undefined : opts.offset,
   })) as CardRow[];
 
   if (cards.length === 0) {
