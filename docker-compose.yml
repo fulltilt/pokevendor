@@ -31,7 +31,8 @@ services:
     volumes:
       - ./apps/api/src:/app/src
       - ./apps/api/prisma:/app/prisma
-    command: sh -lc "npx prisma generate && npx prisma db push && npm run dev"
+      - ./apps/api/package.json:/app/package.json
+    command: sh -lc "npm install && npx prisma generate && npx prisma db push && npm run dev"
 
   web:
     build:
