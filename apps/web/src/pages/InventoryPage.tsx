@@ -602,7 +602,7 @@ export const InventoryPage: FC = () => {
         />
       </div>
 
-      <div className="inventory-controls relative flex flex-wrap items-center gap-3 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(20,51,63,0.94),rgba(11,31,38,0.95))] p-4 shadow-[0_20px_48px_rgba(0,0,0,0.22)] before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:h-44 before:w-44 before:rounded-full before:bg-[radial-gradient(circle,rgba(242,181,68,0.12),transparent_68%)]">
+      <div className="inventory-controls relative flex flex-wrap items-center gap-3 overflow-hidden p-4">
         <Button type="button" onClick={() => setShowAddModal(true)}>
           + Add Item
         </Button>
@@ -636,10 +636,10 @@ export const InventoryPage: FC = () => {
                 setSortBy(null);
               }}
               className={cn(
-                "inline-flex min-h-10 items-center justify-center rounded-[14px] border px-4 py-2 text-sm font-semibold transition duration-200",
+                "inline-flex cursor-pointer items-center justify-center rounded-[14px] border px-4 py-2 text-sm font-semibold transition duration-200",
                 filterStorageType === value
-                  ? "border-[rgba(255,255,255,0.18)] bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_12px_30px_rgba(242,181,68,0.18)]"
-                  : "border-[rgba(157,180,186,0.16)] bg-white/4 text-[var(--text-primary)] hover:border-[rgba(242,181,68,0.4)] hover:bg-[rgba(242,181,68,0.1)]",
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-[#10171c]"
+                  : "border-[rgba(157,180,186,0.22)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]",
               )}
             >
               {label}

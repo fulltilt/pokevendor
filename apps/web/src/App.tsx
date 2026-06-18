@@ -19,7 +19,7 @@ export const App = () => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(242,181,68,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(45,140,155,0.22),transparent_24%),linear-gradient(180deg,#08161d_0%,#07141b_42%,#0b1d25_100%)] p-3 sm:p-4 lg:p-6">
       <div className="min-h-[calc(100vh-24px)] overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,42,53,0.92),rgba(8,24,31,0.96)),rgba(10,18,23,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-[18px] sm:min-h-[calc(100vh-32px)] lg:min-h-[calc(100vh-48px)] lg:rounded-[28px]">
-        <nav className="flex flex-col gap-3 border-b border-[rgba(157,180,186,0.22)] bg-[linear-gradient(135deg,rgba(242,181,68,0.08),transparent_35%),rgba(8,22,28,0.82)] px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:py-4">
+        <nav className="flex flex-col gap-3 border-b border-[rgba(157,180,186,0.22)] bg-[linear-gradient(135deg,rgba(242,181,68,0.08),transparent_35%),rgba(8,22,28,0.82)] px-7 py-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between lg:py-4">
           <div className="flex flex-col gap-0.5">
             <span className="text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-hover)]">
               Inventory and deal desk
@@ -51,7 +51,7 @@ export const App = () => {
           </div>
         </nav>
 
-        <main className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
+        <main className="flex-1 overflow-y-auto px-7 py-6 sm:px-8 lg:py-7">
           <div className="mx-auto w-full max-w-[1440px]">
             {currentPage === "inventory" && <InventoryPage />}
             {currentPage === "deals" && <DealTrackerPage />}
