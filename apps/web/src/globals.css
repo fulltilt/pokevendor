@@ -12,6 +12,22 @@
   --muted: 231 24% 23%;
   --muted-foreground: 0 0% 68%;
   --border: 240 20% 31%;
-  --input: 232 28% 24%;
+  --input: 240 20% 38%;
   --ring: 238 83% 67%;
+}
+
+/* Bridge CSS variables to Tailwind v4 utility classes.
+   Tailwind v4 ignores tailwind.config.ts theme extensions — @theme inline is required. */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
 }
