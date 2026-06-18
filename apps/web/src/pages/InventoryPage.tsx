@@ -636,10 +636,10 @@ export const InventoryPage: FC = () => {
                 setSortBy(null);
               }}
               className={cn(
-                "inline-flex cursor-pointer items-center justify-center rounded-[14px] border px-4 py-2 text-sm font-semibold transition duration-200",
+                "rounded-[14px] border px-4 py-2.5 text-sm font-bold tracking-[0.02em] transition duration-200",
                 filterStorageType === value
-                  ? "border-[var(--accent)] bg-[var(--accent)] text-[#10171c]"
-                  : "border-[rgba(157,180,186,0.22)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]",
+                  ? "border-white/20 bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_12px_30px_rgba(242,181,68,0.18)]"
+                  : "border-[rgba(157,180,186,0.16)] bg-white/4 text-[var(--text-primary)] hover:border-[rgba(242,181,68,0.4)] hover:bg-[rgba(242,181,68,0.1)]",
               )}
             >
               {label}
