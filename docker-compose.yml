@@ -1,3 +1,5 @@
+name: pokevendor
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -52,3 +54,4 @@ services:
 
 volumes:
   postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-pokevendor_postgres_data}
