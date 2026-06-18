@@ -24,6 +24,12 @@ pokevendor/
 
 ## Getting Started
 
+## Card Recognition Playbook
+
+For the Stage 1 URL-based hashing workflow (import -> hash backfill -> recognize), see:
+
+- [HASHING_PLAYBOOK_README.md](HASHING_PLAYBOOK_README.md)
+
 ### Prerequisites
 
 - Docker & Docker Compose
