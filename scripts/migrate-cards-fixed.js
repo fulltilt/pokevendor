@@ -135,10 +135,15 @@ async function migrate() {
   }
 }
 
-// Install pg if missing
-const fs = require("fs");
-const packagePath = require.resolve("pg").catch(() => null);
-if (!packagePath) {
+// Check if pg is installed
+let pgInstalled = true;
+try {
+  require.resolve("pg");
+} catch (err) {
+  pgInstalled = false;
+}
+
+if (!pgInstalled) {
   console.error('❌ The "pg" package is required but not installed.');
   console.error("\nInstall it with:");
   console.error("  npm install pg");
