@@ -17,9 +17,9 @@ export const App = () => {
   const [currentPage, setCurrentPage] = useState<Page>("inventory");
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(242,181,68,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(45,140,155,0.22),transparent_24%),linear-gradient(180deg,#08161d_0%,#07141b_42%,#0b1d25_100%)] p-0 sm:p-3 lg:p-6">
-      <div className="min-h-screen overflow-hidden border-y border-white/8 bg-[linear-gradient(180deg,rgba(16,42,53,0.92),rgba(8,24,31,0.96)),rgba(10,18,23,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-[18px] sm:min-h-[calc(100vh-24px)] sm:rounded-[22px] sm:border sm:border-white/7 lg:min-h-[calc(100vh-48px)] lg:rounded-[28px]">
-        <nav className="flex flex-col gap-3 border-b border-[rgba(157,180,186,0.22)] bg-[linear-gradient(135deg,rgba(242,181,68,0.08),transparent_35%),rgba(8,22,28,0.82)] px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(242,181,68,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(45,140,155,0.22),transparent_24%),linear-gradient(180deg,#08161d_0%,#07141b_42%,#0b1d25_100%)] p-3 sm:p-4 lg:p-6">
+      <div className="min-h-[calc(100vh-24px)] overflow-hidden rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,42,53,0.92),rgba(8,24,31,0.96)),rgba(10,18,23,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-[18px] sm:min-h-[calc(100vh-32px)] lg:min-h-[calc(100vh-48px)] lg:rounded-[28px]">
+        <nav className="flex flex-col gap-3 border-b border-[rgba(157,180,186,0.22)] bg-[linear-gradient(135deg,rgba(242,181,68,0.08),transparent_35%),rgba(8,22,28,0.82)] px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between lg:px-6">
           <div className="flex flex-col gap-0.5">
             <span className="text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-hover)]">
               Inventory and deal desk
@@ -28,7 +28,7 @@ export const App = () => {
               PokeVendor
             </div>
           </div>
-          <div className="flex w-full gap-2 overflow-x-auto rounded-full border border-white/6 bg-white/4 p-1 lg:w-auto">
+          <div className="flex w-full gap-2 overflow-x-auto rounded-full border border-white/6 bg-white/4 p-1.5 lg:w-auto">
             {pages.map((page) => {
               const isActive = currentPage === page.id;
 
@@ -37,7 +37,7 @@ export const App = () => {
                   key={page.id}
                   type="button"
                   className={cn(
-                    "whitespace-nowrap rounded-full border px-4 py-2.5 text-sm font-bold tracking-[0.02em] transition duration-200",
+                    "inline-flex min-h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-full border px-5 py-3 text-sm font-bold tracking-[0.02em] transition duration-200",
                     isActive
                       ? "border-white/20 bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_10px_30px_rgba(242,181,68,0.22)]"
                       : "border-transparent bg-transparent text-[var(--text-secondary)] hover:border-white/8 hover:bg-white/6 hover:text-[var(--text-primary)]",
@@ -51,7 +51,7 @@ export const App = () => {
           </div>
         </nav>
 
-        <main className="flex-1 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
+        <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           <div className="mx-auto w-full max-w-[1440px]">
             {currentPage === "inventory" && <InventoryPage />}
             {currentPage === "deals" && <DealTrackerPage />}

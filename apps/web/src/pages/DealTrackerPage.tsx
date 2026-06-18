@@ -5,6 +5,7 @@ import {
   CardSearchPanel,
   type SearchCard,
 } from "../components/CardSearchPanel";
+import { Button } from "../components/ui/button";
 
 interface DealItem {
   id: string;
@@ -1069,16 +1070,17 @@ export const DealTrackerPage: FC = () => {
                       </option>
                     ))}
                   </select>
-                  <button type="button" onClick={() => void createNewDeal()}>
+                  <Button type="button" onClick={() => void createNewDeal()}>
                     + New Deal
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={() => setShowLocationForm(!showLocationForm)}
+                    variant="secondary"
                     className="secondary-btn"
                   >
                     {showLocationForm ? "Cancel" : "+ Add Location"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -1106,20 +1108,20 @@ export const DealTrackerPage: FC = () => {
                       />
                     </div>
                     <div className="modal-actions">
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setShowLocationForm(false)}
                         disabled={isCreatingLocation}
                       >
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         onClick={() => void createLocation()}
                         disabled={isCreatingLocation || !newLocationName.trim()}
                       >
                         {isCreatingLocation ? "Creating..." : "Create Location"}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
