@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   --background: 230 46% 10%;
@@ -16,8 +14,7 @@
   --ring: 238 83% 67%;
 }
 
-/* Bridge CSS variables to Tailwind v4 utility classes.
-   Tailwind v4 ignores tailwind.config.ts theme extensions — @theme inline is required. */
+/* Bridge CSS variables to Tailwind v4 utility classes through CSS-defined theme tokens. */
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

@@ -5,78 +5,436 @@
 }
 
 :root {
-  --bg-primary: #0a0e27;
-  --bg-secondary: #1a1f3a;
-  --bg-tertiary: #2a2f4a;
-  --text-primary: #ffffff;
-  --text-secondary: #a0a0a0;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --border: #565680;
-  --success: #10b981;
-  --danger: #ef4444;
+  --bg-primary: #07141b;
+  --bg-secondary: rgba(12, 31, 40, 0.8);
+  --bg-tertiary: #102a35;
+  --bg-elevated: #153744;
+  --text-primary: #f5f4ea;
+  --text-secondary: #9db4ba;
+  --accent: #f2b544;
+  --accent-hover: #ffd27a;
+  --accent-strong: #ff9a3d;
+  --accent-soft: rgba(242, 181, 68, 0.14);
+  --border: rgba(157, 180, 186, 0.22);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+  --success: #58c98c;
+  --danger: #ff6b57;
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
-  background-color: var(--bg-primary);
+  font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(242, 181, 68, 0.16),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at top right,
+      rgba(45, 140, 155, 0.22),
+      transparent 24%
+    ),
+    linear-gradient(180deg, #08161d 0%, #07141b 42%, #0b1d25 100%);
   color: var(--text-primary);
   line-height: 1.6;
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
 }
 
 .app {
-  min-height: 100vh;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(16, 42, 53, 0.92), rgba(8, 24, 31, 0.96)),
+    rgba(10, 18, 23, 0.96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
 }
 
 /* Navigation */
 .navbar {
-  background-color: var(--bg-secondary);
+  background:
+    linear-gradient(135deg, rgba(242, 181, 68, 0.08), transparent 35%),
+    rgba(8, 22, 28, 0.82);
   border-bottom: 1px solid var(--border);
-  padding: 1rem 2rem;
+  padding: 1.1rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
+}
+
+.nav-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.nav-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-hover);
 }
 
 .nav-title {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: var(--accent);
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
 }
 
 .nav-links {
   display: flex;
-  gap: 1rem;
+  gap: 0.7rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .nav-btn {
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  transition: all 0.3s ease;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
 }
 
 .nav-btn:hover {
   color: var(--text-primary);
-  background-color: var(--bg-tertiary);
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .nav-btn.active {
-  color: var(--accent);
-  background-color: var(--bg-tertiary);
+  color: #10171c;
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 30px rgba(242, 181, 68, 0.22);
 }
 
 /* Main Content */
 .main-content {
   flex: 1;
-  padding: 2rem;
+  padding: 1.5rem;
   overflow-y: auto;
+}
+
+.main-frame {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+}
+
+.context-panel,
+.inventory-controls,
+.inventory-table,
+.deal-history-table,
+.price-picker-panel,
+.manual-item-form,
+.modal,
+.modal-content {
+  background: linear-gradient(
+    180deg,
+    rgba(20, 51, 63, 0.94),
+    rgba(11, 31, 38, 0.95)
+  );
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+}
+
+.context-panel,
+.inventory-controls,
+.manual-item-form,
+.price-picker-panel,
+.inventory-table,
+.deal-history-table,
+.modal,
+.modal-content {
+  border-radius: 20px;
+}
+
+.context-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.context-panel::before,
+.inventory-controls::before,
+.manual-item-form::before,
+.price-picker-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(
+    circle,
+    rgba(242, 181, 68, 0.12),
+    transparent 68%
+  );
+  pointer-events: none;
+}
+
+.context-panel-header h1,
+.context-panel-header h2,
+.context-panel-header h3,
+.search-panel-header h2 {
+  letter-spacing: 0.01em;
+}
+
+.panel-description,
+.search-meta,
+.inventory-count,
+.page-indicator,
+.text-muted,
+.condition-full-name,
+.trade-calculation,
+.price-unavailable,
+.price-loading,
+.loading,
+.no-results {
+  color: var(--text-secondary);
+}
+
+.selected-card-info,
+.search-status-banner {
+  background: linear-gradient(
+    180deg,
+    rgba(242, 181, 68, 0.12),
+    rgba(255, 154, 61, 0.08)
+  );
+  border: 1px solid rgba(242, 181, 68, 0.28);
+  border-radius: 16px;
+  color: var(--text-primary);
+}
+
+.field-group input,
+.field-group select,
+.search-input,
+.search-sort,
+.since-export-controls input[type="date"],
+.location-form-group input,
+.percentage-input {
+  background: rgba(7, 20, 27, 0.76);
+  border: 1px solid rgba(157, 180, 186, 0.18);
+  border-radius: 14px;
+  color: var(--text-primary);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.field-group input:focus,
+.field-group select:focus,
+.search-input:focus,
+.search-sort:focus,
+.since-export-controls input[type="date"]:focus,
+.location-form-group input:focus,
+.percentage-input:focus {
+  outline: none;
+  border-color: rgba(242, 181, 68, 0.72);
+  box-shadow: 0 0 0 4px rgba(242, 181, 68, 0.12);
+  background: rgba(7, 20, 27, 0.92);
+}
+
+.btn-primary,
+.add-btn,
+.modal-btn-primary,
+.filter-buttons button.active,
+.condition-tab.active,
+.percentage-preset.active,
+.page-btn,
+.nav-btn.active {
+  background-image: linear-gradient(135deg, var(--accent-hover), var(--accent));
+}
+
+.btn-primary,
+.btn-secondary,
+.add-btn,
+.page-btn,
+.modal-btn,
+.action-btn,
+.filter-buttons button,
+.condition-tab,
+.percentage-preset,
+.modal-close {
+  border-radius: 14px;
+}
+
+.btn-primary,
+.add-btn,
+.modal-btn-primary,
+.page-btn,
+.filter-buttons button.active,
+.condition-tab.active,
+.percentage-preset.active {
+  color: #10171c;
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 30px rgba(242, 181, 68, 0.18);
+}
+
+.btn-primary:hover:not(:disabled),
+.add-btn:hover:not(:disabled),
+.modal-btn-primary:hover:not(:disabled),
+.page-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.08);
+}
+
+.btn-secondary,
+.filter-buttons button,
+.condition-tab,
+.percentage-preset,
+.action-btn,
+.modal-btn-cancel,
+.modal-close {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(157, 180, 186, 0.16);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover:not(:disabled),
+.filter-buttons button:hover,
+.condition-tab:hover,
+.percentage-preset:hover,
+.action-btn:hover,
+.modal-btn-cancel:hover:not(:disabled),
+.modal-close:hover {
+  border-color: rgba(242, 181, 68, 0.4);
+  background: rgba(242, 181, 68, 0.1);
+}
+
+.cards-grid {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+  padding-inline: 0;
+  margin-inline: 0;
+}
+
+.card-thumbnail {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    rgba(0, 0, 0, 0.12)
+  );
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+}
+
+.card-thumbnail:hover {
+  border-color: rgba(242, 181, 68, 0.48);
+  box-shadow: 0 24px 42px rgba(0, 0, 0, 0.28);
+  transform: translateY(-4px) rotate(-0.3deg);
+}
+
+.card-image {
+  background-color: rgba(255, 255, 255, 0.04);
+  min-height: 152px;
+}
+
+.card-info {
+  padding: 0.75rem;
+  background: linear-gradient(
+    180deg,
+    rgba(11, 31, 38, 0.1),
+    rgba(11, 31, 38, 0.68)
+  );
+}
+
+.card-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.card-price,
+.inventory-value strong,
+.trade-price-final,
+.tcgplayer-link {
+  color: var(--accent-hover);
+}
+
+.loading,
+.no-results {
+  padding: 2.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(157, 180, 186, 0.2);
+  border-radius: 18px;
+}
+
+.inventory-page,
+.deal-tracker-page,
+.deal-history-page,
+.card-search,
+.card-search-panel {
+  gap: 1.25rem;
+}
+
+.inventory-controls {
+  position: relative;
+  padding: 1.2rem;
+  align-items: center;
+}
+
+.inventory-value {
+  color: var(--text-secondary);
+}
+
+.inventory-table,
+.deal-history-table {
+  overflow: hidden;
+}
+
+.inventory-table thead,
+.deal-history-table thead {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-table th,
+.inventory-table td,
+.deal-history-table th,
+.deal-history-table td {
+  border-bottom: 1px solid rgba(157, 180, 186, 0.12);
+}
+
+.inventory-table tbody tr:hover,
+.deal-history-table tbody tr:hover {
+  background: rgba(242, 181, 68, 0.06);
+}
+
+.modal-overlay {
+  padding: 1rem;
+  background:
+    radial-gradient(circle at top, rgba(242, 181, 68, 0.08), transparent 35%),
+    rgba(3, 9, 12, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.modal,
+.modal-content {
+  border-radius: 24px;
+}
+
+.modal-header,
+.modal-actions,
+.modal-footer {
+  border-color: rgba(157, 180, 186, 0.12);
 }
 
 .context-panel {
@@ -2434,6 +2792,15 @@ body {
 }
 
 @media (max-width: 900px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .app {
+    min-height: calc(100vh - 24px);
+    border-radius: 22px;
+  }
+
   .navbar {
     padding: 0.9rem 1rem;
     flex-direction: column;
@@ -2443,6 +2810,10 @@ body {
 
   .nav-title {
     font-size: 1.2rem;
+  }
+
+  .nav-links {
+    width: 100%;
   }
 
   .nav-links {
@@ -2460,6 +2831,10 @@ body {
 
   .main-content {
     padding: 1rem;
+  }
+
+  .main-frame {
+    width: 100%;
   }
 
   .context-panel {
@@ -2547,6 +2922,17 @@ body {
 }
 
 @media (max-width: 560px) {
+  .app-shell {
+    padding: 0;
+  }
+
+  .app {
+    min-height: 100vh;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
   .main-content {
     padding: 0.75rem;
   }
@@ -2558,7 +2944,7 @@ body {
   }
 
   .cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
     gap: 0.5rem;
   }
 
