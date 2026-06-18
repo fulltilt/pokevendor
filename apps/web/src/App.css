@@ -156,7 +156,6 @@ body {
 .btn-primary,
 .add-btn,
 .modal-btn-primary,
-.filter-buttons button.active,
 .condition-tab.active,
 .percentage-preset.active,
 .page-btn {
@@ -169,7 +168,6 @@ body {
 .page-btn,
 .modal-btn,
 .action-btn,
-.filter-buttons button,
 .condition-tab,
 .percentage-preset,
 .modal-close {
@@ -180,7 +178,6 @@ body {
 .add-btn,
 .modal-btn-primary,
 .page-btn,
-.filter-buttons button.active,
 .condition-tab.active,
 .percentage-preset.active {
   color: #10171c;
@@ -197,7 +194,6 @@ body {
 }
 
 .btn-secondary,
-.filter-buttons button,
 .condition-tab,
 .percentage-preset,
 .action-btn,
@@ -209,7 +205,6 @@ body {
 }
 
 .btn-secondary:hover:not(:disabled),
-.filter-buttons button:hover,
 .condition-tab:hover,
 .percentage-preset:hover,
 .action-btn:hover,
@@ -246,12 +241,6 @@ body {
 .card-search,
 .card-search-panel {
   gap: 1.25rem;
-}
-
-.inventory-controls {
-  position: relative;
-  padding: 1.2rem;
-  align-items: center;
 }
 
 .inventory-value {
@@ -817,33 +806,6 @@ body {
 }
 
 /* Inventory Page */
-.inventory-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.inventory-page h1 {
-  font-size: 2rem;
-  margin-bottom: 0.5rem;
-}
-
-.inventory-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-  padding: 1rem;
-  background-color: var(--bg-secondary);
-  border-radius: 6px;
-}
-
-.inventory-search-input {
-  max-width: 320px;
-  margin-left: auto;
-}
-
 .since-export-controls {
   display: flex;
   align-items: center;
@@ -857,32 +819,6 @@ body {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
   color-scheme: dark;
-}
-
-.filter-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.filter-buttons button {
-  padding: 0.5rem 1rem;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.filter-buttons button:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
-.filter-buttons button.active {
-  background-color: var(--accent);
-  border-color: var(--accent);
-  color: white;
 }
 
 .inventory-value {
@@ -2682,7 +2618,6 @@ body {
 }
 
 @media (max-width: 560px) {
-  .inventory-page h1,
   .deal-tracker-page h1,
   .deal-history-page h1 {
     font-size: 1.35rem;

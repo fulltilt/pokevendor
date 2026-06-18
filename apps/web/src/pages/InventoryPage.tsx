@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FC } from "react";
 import axios from "axios";
+import { cn } from "../lib/utils";
 import {
   CardSearchPanel,
   type SearchCard,
@@ -582,8 +583,10 @@ export const InventoryPage: FC = () => {
   };
 
   return (
-    <div className="inventory-page">
-      <h1>Card Inventory</h1>
+    <div className="inventory-page flex flex-col gap-5">
+      <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text-primary)] sm:text-3xl">
+        Card Inventory
+      </h1>
 
       <div className="context-panel">
         <div className="context-panel-header">
@@ -599,57 +602,49 @@ export const InventoryPage: FC = () => {
         />
       </div>
 
-      <div className="inventory-controls">
+      <div className="inventory-controls relative flex flex-wrap items-center gap-3 overflow-hidden rounded-[20px] border border-[var(--border)] bg-[linear-gradient(180deg,rgba(20,51,63,0.94),rgba(11,31,38,0.95))] p-4 shadow-[0_20px_48px_rgba(0,0,0,0.22)] before:pointer-events-none before:absolute before:inset-0 before:left-0 before:top-0 before:h-44 before:w-44 before:rounded-full before:bg-[radial-gradient(circle,rgba(242,181,68,0.12),transparent_68%)]">
         <Button type="button" onClick={() => setShowAddModal(true)}>
           + Add Item
         </Button>
 
         <Input
           type="text"
-          className="search-input inventory-search-input"
+          className="search-input min-w-0 flex-1 basis-48"
           value={inventorySearch}
           onChange={(e) => {
             setInventorySearch(e.target.value);
             setPage(1);
           }}
-          placeholder="Search inventory by name, number, or card id"
+          placeholder="Search inventory…"
           aria-label="Search inventory"
         />
 
-        <div className="filter-buttons">
-          <button
-            type="button"
-            onClick={() => {
-              setFilterStorageType("all");
-              setPage(1);
-              setSortBy(null);
-            }}
-            className={filterStorageType === "all" ? "active" : ""}
-          >
-            All
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFilterStorageType("in_case");
-              setPage(1);
-              setSortBy(null);
-            }}
-            className={filterStorageType === "in_case" ? "active" : ""}
-          >
-            In Case
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setFilterStorageType("not_in_case");
-              setPage(1);
-              setSortBy(null);
-            }}
-            className={filterStorageType === "not_in_case" ? "active" : ""}
-          >
-            Not In Case
-          </button>
+        <div className="flex gap-2">
+          {(
+            [
+              { value: "all", label: "All" },
+              { value: "in_case", label: "In Case" },
+              { value: "not_in_case", label: "Not In Case" },
+            ] as const
+          ).map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                setFilterStorageType(value);
+                setPage(1);
+                setSortBy(null);
+              }}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center rounded-[14px] border px-4 py-2 text-sm font-semibold transition duration-200",
+                filterStorageType === value
+                  ? "border-[rgba(255,255,255,0.18)] bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_12px_30px_rgba(242,181,68,0.18)]"
+                  : "border-[rgba(157,180,186,0.16)] bg-white/4 text-[var(--text-primary)] hover:border-[rgba(242,181,68,0.4)] hover:bg-[rgba(242,181,68,0.1)]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <Button
