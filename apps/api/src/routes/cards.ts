@@ -3,6 +3,10 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import axios from "axios";
 import sharp from "sharp";
 import multer from "multer";
+import {
+  computeVisionEmbeddingFromBuffer,
+  toPgVectorLiteral,
+} from "../lib/visionEmbedding.js";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -95,6 +99,8 @@ type RecognizeBody = {
   imageUrl?: unknown;
   topK?: unknown;
   setId?: unknown;
+  embeddingSource?: unknown;
+  hashFallbackTopK?: unknown;
 };
 
 const toImageUrl = (value: unknown): string | null => {
@@ -278,6 +284,159 @@ const hammingDistance = (a: string, b: string): number => {
   return diff;
 };
 
+type CardRowLite = {
+  id: string;
+  data: unknown;
+};
+
+type CardDisplayData = {
+  name: string | null;
+  number: string | null;
+  image: string | null;
+};
+
+const toCardDisplayData = (card: CardRowLite | undefined): CardDisplayData => {
+  const data = card?.data as
+    | {
+        name?: unknown;
+        number?: unknown;
+        localId?: unknown;
+        images?: { small?: unknown; large?: unknown };
+      }
+    | undefined;
+
+  let number: string | null = null;
+  if (typeof data?.number === "string") {
+    number = data.number;
+  } else if (typeof data?.localId === "string") {
+    number = data.localId;
+  }
+
+  let image: string | null = null;
+  if (typeof data?.images?.small === "string") {
+    image = data.images.small;
+  } else if (typeof data?.images?.large === "string") {
+    image = data.images.large;
+  }
+
+  return {
+    name: typeof data?.name === "string" ? data.name : null,
+    number,
+    image,
+  };
+};
+
+type EmbeddingSearchRow = {
+  cardId: string;
+  similarity: number;
+};
+
+const embeddingAnnSearch = async (
+  embedding: number[],
+  topK: number,
+  source: string,
+): Promise<EmbeddingSearchRow[]> => {
+  const vectorLiteral = toPgVectorLiteral(embedding);
+
+  const rows = await prisma.$queryRaw<
+    Array<{ cardId: string; similarity: number }>
+  >`
+    SELECT
+      ce."cardId" AS "cardId",
+      (1 - (ce.embedding <=> ${vectorLiteral}::vector)) AS similarity
+    FROM "CardEmbedding" ce
+    WHERE ce.source = ${source}
+    ORDER BY ce.embedding <=> ${vectorLiteral}::vector
+    LIMIT ${topK}
+  `;
+
+  return rows
+    .map((row) => ({
+      cardId: row.cardId,
+      similarity: Number(row.similarity),
+    }))
+    .filter(
+      (row): row is EmbeddingSearchRow =>
+        !!row.cardId && Number.isFinite(row.similarity),
+    );
+};
+
+type HashFallbackMatch = {
+  rank: number;
+  cardId: string;
+  name: string | null;
+  number: string | null;
+  image: string | null;
+  distances: { phash: number; dhash: number; total: number };
+};
+
+const runHashFallbackRecognition = async (
+  imageBuffer: Buffer,
+  topK: number,
+): Promise<HashFallbackMatch[]> => {
+  const dhPixels = await loadGrayscalePixels(imageBuffer, 9, 8);
+  const phPixels = await loadGrayscalePixels(imageBuffer, 32, 32);
+  const queryDHash = dhash64(dhPixels);
+  const queryPHash = phash64(phPixels);
+
+  const hashRows = await prisma.cardHash.findMany({
+    where: {
+      variant: "v1-64",
+      algorithm: { in: ["phash", "dhash"] },
+    },
+    select: {
+      cardId: true,
+      algorithm: true,
+      hash: true,
+    },
+  });
+
+  const byCard = new Map<
+    string,
+    { phash: string | null; dhash: string | null }
+  >();
+  for (const row of hashRows) {
+    const current = byCard.get(row.cardId) ?? { phash: null, dhash: null };
+    if (row.algorithm === "phash") current.phash = row.hash;
+    if (row.algorithm === "dhash") current.dhash = row.hash;
+    byCard.set(row.cardId, current);
+  }
+
+  const scored = [...byCard.entries()]
+    .map(([cardId, hashes]) => {
+      const pDist = hashes.phash
+        ? hammingDistance(queryPHash, hashes.phash)
+        : 64;
+      const dDist = hashes.dhash
+        ? hammingDistance(queryDHash, hashes.dhash)
+        : 64;
+      return { cardId, pDist, dDist, score: pDist + dDist };
+    })
+    .sort((a, b) => a.score - b.score)
+    .slice(0, topK);
+
+  const fallbackCardIds = scored.map((row) => row.cardId);
+  const fallbackCards = await prisma.card.findMany({
+    where: { id: { in: fallbackCardIds } },
+    select: { id: true, data: true },
+  });
+  const fallbackMap = new Map(fallbackCards.map((card) => [card.id, card]));
+
+  return scored.map((row, index) => {
+    const display = toCardDisplayData(fallbackMap.get(row.cardId));
+    return {
+      rank: index + 1,
+      cardId: row.cardId,
+      ...display,
+      distances: {
+        phash: row.pDist,
+        dhash: row.dDist,
+        total: row.score,
+      },
+    };
+  });
+};
+
 const getFallbackPricesFromDb = async (cardId: string): Promise<PriceMap> => {
   const latest = await prisma.priceEntry.findFirst({
     where: { cardId },
@@ -378,30 +537,11 @@ router.post(
 
       const matches = top.map((row) => {
         const card = cardMap.get(row.cardId);
-        const data = card?.data as
-          | {
-              name?: unknown;
-              number?: unknown;
-              localId?: unknown;
-              images?: { small?: unknown; large?: unknown };
-            }
-          | undefined;
+        const display = toCardDisplayData(card);
 
         return {
           cardId: row.cardId,
-          name: typeof data?.name === "string" ? data.name : null,
-          number:
-            typeof data?.number === "string"
-              ? data.number
-              : typeof data?.localId === "string"
-                ? data.localId
-                : null,
-          image:
-            typeof data?.images?.small === "string"
-              ? data.images.small
-              : typeof data?.images?.large === "string"
-                ? data.images.large
-                : null,
+          ...display,
           distances: {
             phash: row.pDist,
             dhash: row.dDist,
@@ -436,6 +576,93 @@ router.post(
 
       console.error("Recognize failed:", error);
       return res.status(500).json({ error: "Recognition failed" });
+    }
+  },
+);
+
+router.post(
+  "/recognize-embedding",
+  upload.single("image"),
+  async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as RecognizeBody;
+      const topK = toPositiveInt(body.topK, 20, 100);
+      const hashFallbackTopK = toPositiveInt(body.hashFallbackTopK, topK, 100);
+      const recognitionInput = await resolveRecognitionInput(req, body);
+      const embeddingSource =
+        parseOptionalText(body.embeddingSource) || "vision-v1";
+
+      const queryEmbedding = await computeVisionEmbeddingFromBuffer(
+        recognitionInput.imageBuffer,
+      );
+
+      const annRows = await embeddingAnnSearch(
+        queryEmbedding,
+        topK,
+        embeddingSource,
+      );
+
+      if (annRows.length === 0) {
+        const fallbackMatches = await runHashFallbackRecognition(
+          recognitionInput.imageBuffer,
+          hashFallbackTopK,
+        );
+
+        return res.json({
+          query: {
+            source: recognitionInput.source,
+            imageUrl: recognitionInput.imageUrl,
+            topK,
+            embeddingSource,
+            embeddingDims: queryEmbedding.length,
+          },
+          mode: "hash-fallback",
+          matches: fallbackMatches,
+        });
+      }
+
+      const cardIds = annRows.map((row) => row.cardId);
+      const cards = await prisma.card.findMany({
+        where: { id: { in: cardIds } },
+        select: { id: true, data: true },
+      });
+      const cardMap = new Map(cards.map((card) => [card.id, card]));
+
+      const matches = annRows.map((row, index) => {
+        const card = cardMap.get(row.cardId);
+        const display = toCardDisplayData(card);
+        return {
+          rank: index + 1,
+          cardId: row.cardId,
+          ...display,
+          similarity: row.similarity,
+        };
+      });
+
+      return res.json({
+        query: {
+          source: recognitionInput.source,
+          imageUrl: recognitionInput.imageUrl,
+          topK,
+          embeddingSource,
+          embeddingDims: queryEmbedding.length,
+        },
+        mode: "embedding-ann",
+        scannedCards: annRows.length,
+        matches,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Embedding recognition failed";
+      if (message.includes("Provide either multipart image")) {
+        return res.status(400).json({ error: message });
+      }
+      if (message.includes("Uploaded file must be an image.")) {
+        return res.status(400).json({ error: message });
+      }
+
+      console.error("Recognize embedding failed:", error);
+      return res.status(500).json({ error: "Embedding recognition failed" });
     }
   },
 );

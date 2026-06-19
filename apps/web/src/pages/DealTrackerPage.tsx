@@ -792,18 +792,22 @@ export const DealTrackerPage: FC = () => {
     if (!scanPhotoFile) return;
 
     setLoadingScanCandidates(true);
-    setScanStatus("Hashing photo and searching for matches...");
+    setScanStatus("Embedding photo and searching ANN index...");
     try {
       const formData = new FormData();
       formData.append("image", scanPhotoFile);
-      formData.append("topK", "8");
+      formData.append("topK", "20");
 
-      const response = await axios.post("/api/cards/recognize", formData);
+      const response = await axios.post(
+        "/api/cards/recognize-embedding",
+        formData,
+      );
       type RecognizeMatch = {
         cardId: string;
         name?: string | null;
         number?: string | null;
         image?: string | null;
+        similarity?: number;
         distances?: { phash?: number; dhash?: number; total?: number };
       };
       const matches = (response.data?.matches ?? []) as RecognizeMatch[];
@@ -817,9 +821,11 @@ export const DealTrackerPage: FC = () => {
       }));
       setScanCandidates(cards);
       if (cards.length > 0) {
-        const best = matches[0]?.distances?.total;
+        const best = matches[0]?.similarity;
         const bestNote =
-          typeof best === "number" ? ` (best score ${best})` : "";
+          typeof best === "number"
+            ? ` (best similarity ${best.toFixed(4)})`
+            : "";
         setScanStatus(
           `Recognition matches ready (${cards.length})${bestNote}. Pick one to add.`,
         );
