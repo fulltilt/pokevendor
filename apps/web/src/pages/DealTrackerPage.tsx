@@ -131,6 +131,7 @@ export const DealTrackerPage: FC = () => {
     useState(false);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
   const [scanPhotoName, setScanPhotoName] = useState("");
+  const [scanPhotoFile, setScanPhotoFile] = useState<File | null>(null);
   const [scanStatus, setScanStatus] = useState(
     "No photo selected. Capture a card photo to begin.",
   );
@@ -770,13 +771,10 @@ export const DealTrackerPage: FC = () => {
     const previewUrl = URL.createObjectURL(file);
     setScanPreviewUrl(previewUrl);
     setScanPhotoName(file.name);
+    setScanPhotoFile(file);
     setScanCandidates([]);
-    setScanStatus(
-      "Photo captured. Recognition lookup is a placeholder for now.",
-    );
-    setDealNotice(
-      "Photo captured. Scan lookup and auto-add are coming soon. Use search below for now.",
-    );
+    setScanStatus("Photo captured. Tap Find Matches to run recognition.");
+    setDealNotice("Photo captured. Tap Find Matches to run recognition.");
   };
 
   const clearScanPhoto = () => {
@@ -785,49 +783,65 @@ export const DealTrackerPage: FC = () => {
     }
     setScanPreviewUrl(null);
     setScanPhotoName("");
+    setScanPhotoFile(null);
     setScanCandidates([]);
     setScanStatus("No photo selected. Capture a card photo to begin.");
   };
 
-  const runMockScanLookup = async () => {
-    if (!scanPreviewUrl) return;
-
-    const baseName = scanPhotoName
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[_-]+/g, " ")
-      .trim();
-    const query = baseName.length >= 2 ? baseName : "pikachu";
+  const runScanRecognize = async () => {
+    if (!scanPhotoFile) return;
 
     setLoadingScanCandidates(true);
-    setScanStatus(`Running mock lookup for "${query}"...`);
+    setScanStatus("Hashing photo and searching for matches...");
     try {
-      const response = await axios.get("/api/cards/search", {
-        params: {
-          q: query,
-          limit: 8,
-          offset: 0,
-          sortBy: "dateDesc",
+      const formData = new FormData();
+      formData.append("image", scanPhotoFile);
+      formData.append("topK", "8");
+
+      const response = await axios.post("/api/cards/recognize", formData);
+      type RecognizeMatch = {
+        cardId: string;
+        name?: string | null;
+        number?: string | null;
+        image?: string | null;
+        distances?: { phash?: number; dhash?: number; total?: number };
+      };
+      const matches = (response.data?.matches ?? []) as RecognizeMatch[];
+      const cards: SearchCard[] = matches.map((m) => ({
+        id: m.cardId,
+        data: {
+          name: m.name ?? undefined,
+          number: m.number ?? undefined,
+          images: m.image ? { small: m.image, large: m.image } : undefined,
         },
-      });
-      const cards = (response.data.cards ?? []) as SearchCard[];
+      }));
       setScanCandidates(cards);
       if (cards.length > 0) {
-        setScanStatus(`Mock matches ready (${cards.length}). Pick one to add.`);
+        const best = matches[0]?.distances?.total;
+        const bestNote =
+          typeof best === "number" ? ` (best score ${best})` : "";
+        setScanStatus(
+          `Recognition matches ready (${cards.length})${bestNote}. Pick one to add.`,
+        );
       } else {
-        setScanStatus("No mock matches found. Try manual search below.");
+        setScanStatus("No matches found. Try manual search below.");
       }
     } catch (error) {
-      console.error("Mock scan lookup failed:", error);
+      console.error("Scan recognize failed:", error);
       setScanCandidates([]);
-      setScanStatus("Mock lookup failed. Use manual search below.");
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.error
+          ? String(error.response.data.error)
+          : "Recognition failed. Use manual search below.";
+      setScanStatus(message);
     } finally {
       setLoadingScanCandidates(false);
     }
   };
 
-  const addMockCandidateToIncoming = async (card: SearchCard) => {
+  const addScanCandidateToIncoming = async (card: SearchCard) => {
     await addCardToDeal(card);
-    setDealNotice(`Added ${card.data?.name || card.id} from mock scan match.`);
+    setDealNotice(`Added ${card.data?.name || card.id} from scan match.`);
   };
 
   const netCash = outgoingTotal - incomingTotal;
@@ -1276,12 +1290,12 @@ export const DealTrackerPage: FC = () => {
                   <button
                     type="button"
                     className="btn-primary"
-                    disabled={!scanPreviewUrl}
-                    onClick={() => void runMockScanLookup()}
+                    disabled={!scanPhotoFile || loadingScanCandidates}
+                    onClick={() => void runScanRecognize()}
                   >
                     {loadingScanCandidates
                       ? "Finding Matches..."
-                      : "Find Matches (Mock)"}
+                      : "Find Matches"}
                   </button>
                 </div>
 
@@ -1316,7 +1330,7 @@ export const DealTrackerPage: FC = () => {
                           type="button"
                           className="btn-secondary"
                           onClick={() =>
-                            void addMockCandidateToIncoming(candidate)
+                            void addScanCandidateToIncoming(candidate)
                           }
                         >
                           Add to Incoming
