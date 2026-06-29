@@ -7,6 +7,8 @@ const prisma = new PrismaClient();
 const DEAL_NOT_FOUND = "DEAL_NOT_FOUND";
 const DEAL_ALREADY_FINALIZED = "DEAL_ALREADY_FINALIZED";
 const INSUFFICIENT_INVENTORY_PREFIX = "INSUFFICIENT_INVENTORY:";
+const INSUFFICIENT_INVENTORY_FOR_DELETE_PREFIX =
+  "INSUFFICIENT_INVENTORY_FOR_DELETE:";
 
 const syncIncomingItemsToInventory = async (
   tx: Prisma.TransactionClient,
@@ -86,6 +88,91 @@ const applyOutgoingInventoryAdjustments = async (
   }
 };
 
+const removeInventoryQuantities = async (
+  tx: Prisma.TransactionClient,
+  itemsToRemove: Array<{
+    cardId: string | null;
+    quantity: number;
+  }>,
+  options?: {
+    order?: "asc" | "desc";
+    insufficientPrefix?: string;
+  },
+) => {
+  const order = options?.order ?? "asc";
+  const insufficientPrefix =
+    options?.insufficientPrefix ?? INSUFFICIENT_INVENTORY_PREFIX;
+
+  for (const item of itemsToRemove) {
+    if (!item.cardId) {
+      continue;
+    }
+
+    let remainingToRemove = item.quantity;
+    const inventoryRows = await tx.inventoryItem.findMany({
+      where: { cardId: item.cardId },
+      orderBy: { createdAt: order },
+    });
+
+    const totalAvailable = inventoryRows.reduce(
+      (sum, row) => sum + row.quantity,
+      0,
+    );
+
+    if (totalAvailable < remainingToRemove) {
+      throw new Error(`${insufficientPrefix}${item.cardId}`);
+    }
+
+    for (const row of inventoryRows) {
+      if (remainingToRemove <= 0) {
+        break;
+      }
+
+      const removeFromRow = Math.min(row.quantity, remainingToRemove);
+      if (removeFromRow === row.quantity) {
+        await tx.inventoryItem.delete({ where: { id: row.id } });
+      } else {
+        await tx.inventoryItem.update({
+          where: { id: row.id },
+          data: { quantity: row.quantity - removeFromRow },
+        });
+      }
+
+      remainingToRemove -= removeFromRow;
+    }
+  }
+};
+
+const rollbackFinalizedDealInventorySync = async (
+  tx: Prisma.TransactionClient,
+  deal: {
+    location: string | null;
+    items: Array<{
+      cardId: string | null;
+      quantity: number;
+      price: number;
+      itemType: string;
+      direction: string;
+    }>;
+  },
+) => {
+  const incomingItems = deal.items.filter(
+    (item) => item.direction === "incoming",
+  );
+  const outgoingItems = deal.items.filter(
+    (item) => item.direction === "outgoing",
+  );
+
+  // Reversing a finalized deal means restoring outgoing cards first.
+  await syncIncomingItemsToInventory(tx, outgoingItems, deal.location);
+
+  // Then remove what that deal originally added to inventory.
+  await removeInventoryQuantities(tx, incomingItems, {
+    order: "desc",
+    insufficientPrefix: INSUFFICIENT_INVENTORY_FOR_DELETE_PREFIX,
+  });
+};
+
 const finalizeDealWithInventorySync = async (dealId: string) => {
   return prisma.$transaction(async (tx) => {
     const existingDeal = await tx.deal.findUnique({
@@ -162,14 +249,14 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
       notes,
     } = req.body;
 
-    const isMissingPrice =
-      price === undefined || price === null || price === "";
-
-    if (!direction || isMissingPrice) {
+    if (!direction) {
       return res.status(400).json({
-        error: "Missing required fields: direction, price",
+        error: "Missing required field: direction",
       });
     }
+
+    const normalizedPrice = Number(price);
+    const safePrice = Number.isFinite(normalizedPrice) ? normalizedPrice : 0;
 
     if (!["incoming", "outgoing"].includes(direction)) {
       return res
@@ -183,7 +270,7 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
         cardId: itemType === "card" ? cardId : null,
         direction,
         quantity,
-        price,
+        price: safePrice,
         itemType,
         notes: notes || null,
       },
@@ -620,17 +707,43 @@ router.patch("/:dealId", async (req: Request, res: Response) => {
   }
 });
 
-// Delete deal (cascade deletes DealItems via FK)
+// Delete deal (rollback inventory changes if finalized, then cascade delete DealItems via FK)
 router.delete("/:dealId", async (req: Request, res: Response) => {
   try {
     const { dealId } = req.params;
 
-    await prisma.deal.delete({
-      where: { id: dealId },
+    await prisma.$transaction(async (tx) => {
+      const existingDeal = await tx.deal.findUnique({
+        where: { id: dealId },
+        include: { items: true },
+      });
+
+      if (!existingDeal) {
+        throw new Error(DEAL_NOT_FOUND);
+      }
+
+      if (existingDeal.status === "finalized") {
+        await rollbackFinalizedDealInventorySync(tx, existingDeal);
+      }
+
+      await tx.deal.delete({
+        where: { id: dealId },
+      });
     });
 
     res.json({ success: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === DEAL_NOT_FOUND) {
+        return res.status(404).json({ error: "Deal not found" });
+      }
+      if (error.message.startsWith(INSUFFICIENT_INVENTORY_FOR_DELETE_PREFIX)) {
+        const cardId = error.message.split(":")[1] || "unknown";
+        return res.status(400).json({
+          error: `Cannot delete finalized deal because inventory for card ${cardId} has changed since finalization`,
+        });
+      }
+    }
     res.status(500).json({ error: "Failed to delete deal" });
   }
 });

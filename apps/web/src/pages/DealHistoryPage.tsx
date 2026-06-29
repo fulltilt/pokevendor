@@ -69,6 +69,10 @@ interface TimeAnalytic {
   avgNetCash: number;
 }
 
+interface LocationOption {
+  name: string;
+}
+
 const fmt = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 
 const fmtSigned = (n: number) =>
@@ -110,6 +114,7 @@ export const DealHistoryPage: FC = () => {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [allLocations, setAllLocations] = useState<string[]>([]);
+  const [savedLocations, setSavedLocations] = useState<string[]>([]);
   const pageSize = 25;
 
   // --- Analytics filter state ---
@@ -142,6 +147,23 @@ export const DealHistoryPage: FC = () => {
     editingDealId !== null
       ? (deals.find((deal) => deal.id === editingDealId) ?? null)
       : null;
+
+  const loadSavedLocations = async () => {
+    try {
+      const res = await axios.get<LocationOption[]>("/api/locations");
+      const names = (res.data ?? [])
+        .map((loc) => (loc.name || "").trim())
+        .filter((name) => name.length > 0)
+        .sort((a, b) => a.localeCompare(b));
+      setSavedLocations(names);
+    } catch (error) {
+      console.error("Failed to fetch saved locations:", error);
+    }
+  };
+
+  useEffect(() => {
+    void loadSavedLocations();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -258,6 +280,7 @@ export const DealHistoryPage: FC = () => {
 
   // --- CRUD Handlers ---
   const handleEditOpen = (deal: DealSummary) => {
+    void loadSavedLocations();
     setExpandedId(deal.id);
     setEditingDealId(deal.id);
     setEditLocation(deal.location || "");
@@ -476,6 +499,7 @@ export const DealHistoryPage: FC = () => {
     new Set(
       [
         ...allLocations,
+        ...savedLocations,
         editLocation.trim(),
         editingDeal?.location?.trim() ?? "",
       ].filter((loc) => loc.length > 0),

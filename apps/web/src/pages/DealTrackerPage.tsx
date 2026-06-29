@@ -127,8 +127,11 @@ export const DealTrackerPage: FC = () => {
   const [targetNetCash, setTargetNetCash] = useState("0");
   const [isApplyingCash, setIsApplyingCash] = useState(false);
   const [outgoingTradePercentage, setOutgoingTradePercentage] = useState(80);
+  const [hasPendingOutgoingPercentage, setHasPendingOutgoingPercentage] =
+    useState(false);
   const [isApplyingOutgoingPercentage, setIsApplyingOutgoingPercentage] =
     useState(false);
+  const [isFinalizingDeal, setIsFinalizingDeal] = useState(false);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
   const [scanPhotoName, setScanPhotoName] = useState("");
   const [scanPhotoFile, setScanPhotoFile] = useState<File | null>(null);
@@ -244,11 +247,18 @@ export const DealTrackerPage: FC = () => {
     }
   };
 
-  const fetchDealDetails = async (dealId: string) => {
+  const fetchDealDetails = async (
+    dealId: string,
+    options?: { resetOutgoingPercentageState?: boolean },
+  ) => {
     const response = await axios.get(`/api/deals/${dealId}`);
     setCurrentDeal(response.data.deal);
     setIncomingTotal(response.data.incomingTotal);
     setOutgoingTotal(response.data.outgoingTotal);
+    if (options?.resetOutgoingPercentageState) {
+      setHasPendingOutgoingPercentage(false);
+      setOutgoingTradePercentage(80);
+    }
   };
 
   const loadDraftDeals = async () => {
@@ -325,7 +335,9 @@ export const DealTrackerPage: FC = () => {
       if (typeof window !== "undefined") {
         localStorage.setItem("lastDealLocation", location);
       }
-      await fetchDealDetails(response.data.id);
+      await fetchDealDetails(response.data.id, {
+        resetOutgoingPercentageState: true,
+      });
       // Keep location selected for next deal
       setDealNotice(
         "Deal started. Use incoming search for buys and inventory search for outgoing.",
@@ -341,11 +353,8 @@ export const DealTrackerPage: FC = () => {
       return;
     }
 
-    // Incoming side uses the card database search.
-    const effectivePrice = (price ?? Number.parseFloat(itemPrice)) || 0;
-    if (price != null) {
-      setItemPrice(String(price));
-    }
+    // Incoming search adds use market price when available, otherwise 0.
+    const effectivePrice = Number.isFinite(price) ? (price as number) : 0;
     setDealNotice(null);
     try {
       await axios.post(`/api/deals/${currentDeal.id}/items`, {
@@ -542,20 +551,40 @@ export const DealTrackerPage: FC = () => {
 
   const finalizeDeal = async () => {
     if (!currentDeal) return;
+    if (isApplyingOutgoingPercentage || isApplyingCash || isFinalizingDeal) {
+      return;
+    }
+
+    setIsFinalizingDeal(true);
     try {
+      if (hasPendingOutgoingPercentage && outgoingTradePercentage !== 100) {
+        const applied = await applyOutgoingPercentage({
+          silentSuccessNotice: true,
+        });
+        if (!applied) {
+          return;
+        }
+      }
+
       await axios.post(`/api/deals/${currentDeal.id}/finalize`);
       setCurrentDeal(null);
       setIncomingTotal(0);
       setOutgoingTotal(0);
+      setHasPendingOutgoingPercentage(false);
+      setOutgoingTradePercentage(80);
       void loadDraftDeals();
       setDealNotice("Deal finalized.");
     } catch (error) {
       console.error("Failed to finalize deal:", error);
       setDealNotice("Failed to finalize deal.");
+    } finally {
+      setIsFinalizingDeal(false);
     }
   };
 
-  const applyOutgoingPercentage = async () => {
+  const applyOutgoingPercentage = async (options?: {
+    silentSuccessNotice?: boolean;
+  }) => {
     if (!currentDeal) return;
 
     const incomingNonCashItems = (currentDeal.incoming ?? []).filter(
@@ -564,7 +593,7 @@ export const DealTrackerPage: FC = () => {
 
     if (incomingNonCashItems.length === 0) {
       setDealNotice("No incoming items to apply percentage to.");
-      return;
+      return false;
     }
 
     setIsApplyingOutgoingPercentage(true);
@@ -587,12 +616,17 @@ export const DealTrackerPage: FC = () => {
       );
 
       await fetchDealDetails(currentDeal.id);
-      setDealNotice(
-        `Applied ${outgoingTradePercentage}% to incoming item prices.`,
-      );
+      setHasPendingOutgoingPercentage(false);
+      if (!options?.silentSuccessNotice) {
+        setDealNotice(
+          `Applied ${outgoingTradePercentage}% to incoming item prices.`,
+        );
+      }
+      return true;
     } catch (error) {
       console.error("Failed to apply outgoing percentage:", error);
       setDealNotice("Failed to apply percentage to incoming items.");
+      return false;
     } finally {
       setIsApplyingOutgoingPercentage(false);
     }
@@ -1180,7 +1214,11 @@ export const DealTrackerPage: FC = () => {
                           <button
                             type="button"
                             className="btn-primary"
-                            onClick={() => void fetchDealDetails(draft.id)}
+                            onClick={() =>
+                              void fetchDealDetails(draft.id, {
+                                resetOutgoingPercentageState: true,
+                              })
+                            }
                           >
                             Resume
                           </button>
@@ -1802,7 +1840,11 @@ export const DealTrackerPage: FC = () => {
                     type="button"
                     className="btn-secondary"
                     onClick={() => void applyNetCashTarget()}
-                    disabled={isApplyingCash}
+                    disabled={
+                      isApplyingCash ||
+                      isApplyingOutgoingPercentage ||
+                      isFinalizingDeal
+                    }
                   >
                     {isApplyingCash ? "Applying..." : "Apply Target"}
                   </button>
@@ -1822,8 +1864,13 @@ export const DealTrackerPage: FC = () => {
                   type="button"
                   onClick={finalizeDeal}
                   className="finalize-btn"
+                  disabled={
+                    isFinalizingDeal ||
+                    isApplyingOutgoingPercentage ||
+                    isApplyingCash
+                  }
                 >
-                  Finalize Deal
+                  {isFinalizingDeal ? "Finalizing..." : "Finalize Deal"}
                 </button>
               </div>
             </div>
@@ -1847,7 +1894,10 @@ export const DealTrackerPage: FC = () => {
                             key={pct}
                             type="button"
                             className={`percentage-preset${outgoingTradePercentage === pct ? " active" : ""}`}
-                            onClick={() => setOutgoingTradePercentage(pct)}
+                            onClick={() => {
+                              setOutgoingTradePercentage(pct);
+                              setHasPendingOutgoingPercentage(pct !== 100);
+                            }}
                             disabled={isApplyingOutgoingPercentage}
                           >
                             {pct}%
@@ -1866,6 +1916,7 @@ export const DealTrackerPage: FC = () => {
                               Math.min(200, Number(e.target.value) || 100),
                             );
                             setOutgoingTradePercentage(next);
+                            setHasPendingOutgoingPercentage(next !== 100);
                           }}
                           className="percentage-input"
                           disabled={isApplyingOutgoingPercentage}
