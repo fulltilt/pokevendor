@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FC } from "react";
 import axios from "axios";
+import { createPortal } from "react-dom";
 import {
   CardSearchPanel,
   type SearchCard,
@@ -127,10 +128,7 @@ export const DealTrackerPage: FC = () => {
   const [targetNetCash, setTargetNetCash] = useState("0");
   const [isApplyingCash, setIsApplyingCash] = useState(false);
   const [outgoingTradePercentage, setOutgoingTradePercentage] = useState(80);
-  const [hasPendingOutgoingPercentage, setHasPendingOutgoingPercentage] =
-    useState(false);
-  const [isApplyingOutgoingPercentage, setIsApplyingOutgoingPercentage] =
-    useState(false);
+  const isApplyingOutgoingPercentage = false;
   const [isFinalizingDeal, setIsFinalizingDeal] = useState(false);
   const [scanPreviewUrl, setScanPreviewUrl] = useState<string | null>(null);
   const [scanPhotoName, setScanPhotoName] = useState("");
@@ -256,7 +254,6 @@ export const DealTrackerPage: FC = () => {
     setIncomingTotal(response.data.incomingTotal);
     setOutgoingTotal(response.data.outgoingTotal);
     if (options?.resetOutgoingPercentageState) {
-      setHasPendingOutgoingPercentage(false);
       setOutgoingTradePercentage(80);
     }
   };
@@ -557,20 +554,10 @@ export const DealTrackerPage: FC = () => {
 
     setIsFinalizingDeal(true);
     try {
-      if (hasPendingOutgoingPercentage && outgoingTradePercentage !== 100) {
-        const applied = await applyOutgoingPercentage({
-          silentSuccessNotice: true,
-        });
-        if (!applied) {
-          return;
-        }
-      }
-
       await axios.post(`/api/deals/${currentDeal.id}/finalize`);
       setCurrentDeal(null);
       setIncomingTotal(0);
       setOutgoingTotal(0);
-      setHasPendingOutgoingPercentage(false);
       setOutgoingTradePercentage(80);
       void loadDraftDeals();
       setDealNotice("Deal finalized.");
@@ -585,51 +572,14 @@ export const DealTrackerPage: FC = () => {
   const applyOutgoingPercentage = async (options?: {
     silentSuccessNotice?: boolean;
   }) => {
-    if (!currentDeal) return;
+    if (!currentDeal) return false;
 
-    const incomingNonCashItems = (currentDeal.incoming ?? []).filter(
-      (item) => item.itemType !== "cash",
-    );
-
-    if (incomingNonCashItems.length === 0) {
-      setDealNotice("No incoming items to apply percentage to.");
-      return false;
-    }
-
-    setIsApplyingOutgoingPercentage(true);
-    setDealNotice(null);
-
-    try {
-      await Promise.all(
-        incomingNonCashItems.map((item) => {
-          const basePrice = toFiniteNumber(item.price);
-          const adjustedPrice = Number(
-            (basePrice * (outgoingTradePercentage / 100)).toFixed(2),
-          );
-
-          return axios.patch(`/api/deals/items/${item.id}`, {
-            quantity: item.quantity,
-            price: adjustedPrice,
-            ...(item.itemType !== "card" && { notes: item.notes ?? "" }),
-          });
-        }),
+    if (!options?.silentSuccessNotice) {
+      setDealNotice(
+        `Offer set to ${outgoingTradePercentage}%. Incoming items remain saved at market (100%).`,
       );
-
-      await fetchDealDetails(currentDeal.id);
-      setHasPendingOutgoingPercentage(false);
-      if (!options?.silentSuccessNotice) {
-        setDealNotice(
-          `Applied ${outgoingTradePercentage}% to incoming item prices.`,
-        );
-      }
-      return true;
-    } catch (error) {
-      console.error("Failed to apply outgoing percentage:", error);
-      setDealNotice("Failed to apply percentage to incoming items.");
-      return false;
-    } finally {
-      setIsApplyingOutgoingPercentage(false);
     }
+    return true;
   };
 
   const applyNetCashTarget = async () => {
@@ -1138,48 +1088,54 @@ export const DealTrackerPage: FC = () => {
                 </div>
               </div>
 
-              {showLocationForm && (
-                <div className="location-form-modal">
-                  <div
-                    className="modal-overlay"
-                    onClick={() => setShowLocationForm(false)}
-                  />
-                  <div className="modal-content">
-                    <h3>Add New Location</h3>
-                    <div className="location-form-group">
-                      <input
-                        type="text"
-                        placeholder="Enter location name (e.g., Local Game Store, Home)"
-                        value={newLocationName}
-                        onChange={(e) => setNewLocationName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            void createLocation();
+              {showLocationForm &&
+                createPortal(
+                  <div className="location-form-modal">
+                    <div
+                      className="modal-overlay"
+                      onClick={() => setShowLocationForm(false)}
+                    />
+                    <div className="modal-content">
+                      <h3>Add New Location</h3>
+                      <div className="location-form-group">
+                        <input
+                          type="text"
+                          placeholder="Enter location name (e.g., Local Game Store, Home)"
+                          value={newLocationName}
+                          onChange={(e) => setNewLocationName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              void createLocation();
+                            }
+                          }}
+                          disabled={isCreatingLocation}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="modal-actions">
+                        <Button
+                          type="button"
+                          onClick={() => setShowLocationForm(false)}
+                          disabled={isCreatingLocation}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => void createLocation()}
+                          disabled={
+                            isCreatingLocation || !newLocationName.trim()
                           }
-                        }}
-                        disabled={isCreatingLocation}
-                        autoFocus
-                      />
+                        >
+                          {isCreatingLocation
+                            ? "Creating..."
+                            : "Create Location"}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="modal-actions">
-                      <Button
-                        type="button"
-                        onClick={() => setShowLocationForm(false)}
-                        disabled={isCreatingLocation}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        onClick={() => void createLocation()}
-                        disabled={isCreatingLocation || !newLocationName.trim()}
-                      >
-                        {isCreatingLocation ? "Creating..." : "Create Location"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
+                  </div>,
+                  document.body,
+                )}
 
               {loadingDrafts ? (
                 <div className="loading">Loading draft deals...</div>
@@ -1896,7 +1852,6 @@ export const DealTrackerPage: FC = () => {
                             className={`percentage-preset${outgoingTradePercentage === pct ? " active" : ""}`}
                             onClick={() => {
                               setOutgoingTradePercentage(pct);
-                              setHasPendingOutgoingPercentage(pct !== 100);
                             }}
                             disabled={isApplyingOutgoingPercentage}
                           >
@@ -1916,7 +1871,6 @@ export const DealTrackerPage: FC = () => {
                               Math.min(200, Number(e.target.value) || 100),
                             );
                             setOutgoingTradePercentage(next);
-                            setHasPendingOutgoingPercentage(next !== 100);
                           }}
                           className="percentage-input"
                           disabled={isApplyingOutgoingPercentage}
@@ -1985,78 +1939,80 @@ export const DealTrackerPage: FC = () => {
         )}
       </div>
 
-      {editingDealItem && (
-        <div className="location-form-modal">
-          <div className="modal-overlay" onClick={closeEditDealItem} />
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>
-                Edit{" "}
-                {editingDealItem.notes ||
-                  editingDealItem.card?.data?.name ||
-                  editingDealItem.cardId ||
-                  editingDealItem.itemType}
-              </h3>
-            </div>
+      {editingDealItem &&
+        createPortal(
+          <div className="location-form-modal">
+            <div className="modal-overlay" onClick={closeEditDealItem} />
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3>
+                  Edit{" "}
+                  {editingDealItem.notes ||
+                    editingDealItem.card?.data?.name ||
+                    editingDealItem.cardId ||
+                    editingDealItem.itemType}
+                </h3>
+              </div>
 
-            <div className="modal-body">
-              <div className="context-form-grid">
-                {editingDealItem.itemType !== "card" && (
-                  <label className="field-group field-group-wide">
-                    <span>Name / Description</span>
+              <div className="modal-body">
+                <div className="context-form-grid">
+                  {editingDealItem.itemType !== "card" && (
+                    <label className="field-group field-group-wide">
+                      <span>Name / Description</span>
+                      <input
+                        type="text"
+                        value={editDealNotes}
+                        onChange={(e) => setEditDealNotes(e.target.value)}
+                        placeholder="Item description"
+                      />
+                    </label>
+                  )}
+
+                  <label className="field-group">
+                    <span>Quantity</span>
                     <input
-                      type="text"
-                      value={editDealNotes}
-                      onChange={(e) => setEditDealNotes(e.target.value)}
-                      placeholder="Item description"
+                      type="number"
+                      min="1"
+                      value={editDealQuantity}
+                      onChange={(e) => setEditDealQuantity(e.target.value)}
                     />
                   </label>
-                )}
 
-                <label className="field-group">
-                  <span>Quantity</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={editDealQuantity}
-                    onChange={(e) => setEditDealQuantity(e.target.value)}
-                  />
-                </label>
+                  <label className="field-group">
+                    <span>Price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editDealPrice}
+                      onChange={(e) => setEditDealPrice(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
 
-                <label className="field-group">
-                  <span>Price</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editDealPrice}
-                    onChange={(e) => setEditDealPrice(e.target.value)}
-                  />
-                </label>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={closeEditDealItem}
+                  disabled={editDealSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => void saveDealItemEdits()}
+                  disabled={editDealSaving}
+                >
+                  {editDealSaving ? "Saving..." : "Save Changes"}
+                </button>
               </div>
             </div>
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={closeEditDealItem}
-                disabled={editDealSaving}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => void saveDealItemEdits()}
-                disabled={editDealSaving}
-              >
-                {editDealSaving ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };

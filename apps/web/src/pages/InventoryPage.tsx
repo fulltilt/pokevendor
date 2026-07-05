@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FC } from "react";
 import axios from "axios";
 import { cn } from "../lib/utils";
@@ -249,7 +249,12 @@ export const InventoryPage: FC = () => {
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 20;
-  type InventorySortBy = "condition" | "priceCurrentAsk" | "totalValue" | null;
+  type InventorySortBy =
+    | "condition"
+    | "priceCurrentAsk"
+    | "totalValue"
+    | "priceChange"
+    | null;
   const [sortBy, setSortBy] = useState<InventorySortBy>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [priceChangeByItemId, setPriceChangeByItemId] = useState<
@@ -275,6 +280,28 @@ export const InventoryPage: FC = () => {
     if (sortBy !== col) return " ⇅";
     return sortDir === "asc" ? " ↑" : " ↓";
   };
+
+  const displayedItems = useMemo(() => {
+    if (sortBy !== "priceChange") {
+      return items;
+    }
+
+    const sorted = [...items];
+    sorted.sort((a, b) => {
+      const aDelta = priceChangeByItemId[a.id]?.delta;
+      const bDelta = priceChangeByItemId[b.id]?.delta;
+      const aMissing = aDelta === undefined;
+      const bMissing = bDelta === undefined;
+
+      if (aMissing && bMissing) return 0;
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+
+      return sortDir === "asc" ? aDelta - bDelta : bDelta - aDelta;
+    });
+
+    return sorted;
+  }, [items, priceChangeByItemId, sortBy, sortDir]);
 
   let manualItemPlaceholder = "e.g., Charizard Base Set";
   if (addItemType === "sealed") {
@@ -306,7 +333,7 @@ export const InventoryPage: FC = () => {
       if (inventorySearch.trim()) {
         params.q = inventorySearch.trim();
       }
-      if (sortBy) {
+      if (sortBy && sortBy !== "priceChange") {
         params.sortBy = sortBy;
         params.sortDir = sortDir;
       }
@@ -720,12 +747,17 @@ export const InventoryPage: FC = () => {
                 >
                   Total Value{sortArrow("totalValue")}
                 </th>
-                <th>Change</th>
+                <th
+                  className="sortable-th"
+                  onClick={() => handleSort("priceChange")}
+                >
+                  Change{sortArrow("priceChange")}
+                </th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {items.map((item) =>
+              {displayedItems.map((item) =>
                 (() => {
                   const priceCurrentAsk = toFiniteNumber(
                     item.priceCurrentAsk,
