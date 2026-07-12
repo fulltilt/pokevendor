@@ -110,6 +110,7 @@ model Deal {
   dateCreated  DateTime    @default(now())
   dateStarted  DateTime?   // When deal started at a show
   dateFinalized DateTime?   // When deal was completed
+  finalizedTradePercentage Float? // Trade-credit percentage used at finalize time
   
   location     String?     // Location name (e.g., "East Bay Card Show")
   

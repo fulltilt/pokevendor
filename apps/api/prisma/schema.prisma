@@ -92,6 +92,7 @@ model Deal {
   dateCreated   DateTime   @default(now())
   dateStarted   DateTime?
   dateFinalized DateTime?
+  finalizedTradePercentage Float?
   location      String?
   items         DealItem[]
   notes         String?

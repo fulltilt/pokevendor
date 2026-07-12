@@ -13,7 +13,8 @@ const INSUFFICIENT_INVENTORY_FOR_DELETE_PREFIX =
 const normalizeFinalizedPercentage = (value: unknown): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
-    return 100;
+    // Default to the app's standard trade-credit behavior when clients omit the field.
+    return 80;
   }
 
   return Math.min(Math.max(parsed, 0), 100);
@@ -242,6 +243,7 @@ const finalizeDealWithInventorySync = async (
       data: {
         status: "finalized",
         dateFinalized: new Date(),
+        finalizedTradePercentage: incomingPercentage,
       },
       include: {
         items: { include: { card: true } },
@@ -619,9 +621,13 @@ router.delete("/items/:itemId", async (req: Request, res: Response) => {
 router.post("/:dealId/finalize", async (req: Request, res: Response) => {
   try {
     const { dealId } = req.params;
-    const incomingPercentage = normalizeFinalizedPercentage(
-      req.body?.outgoingTradePercentage,
-    );
+    const requestedPercentage =
+      req.body?.outgoingTradePercentage ??
+      req.body?.incomingTradePercentage ??
+      req.body?.tradePercentage ??
+      req.body?.percentage;
+    const incomingPercentage =
+      normalizeFinalizedPercentage(requestedPercentage);
     const deal = await finalizeDealWithInventorySync(
       dealId,
       incomingPercentage,

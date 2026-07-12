@@ -95,6 +95,76 @@ describe("POST /api/deals/:dealId/finalize", () => {
       where: { id: "incoming-item-1" },
       data: { price: 67.2 },
     });
+    expect(mockTx.deal.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "deal-1" },
+        data: expect.objectContaining({
+          status: "finalized",
+          finalizedTradePercentage: 80,
+        }),
+      }),
+    );
     expect(response.body.incoming[0].price).toBe(67.2);
+  });
+
+  it("defaults to 80% discount when finalize payload omits trade percentage", async () => {
+    const discountedItem = {
+      id: "incoming-item-2",
+      dealId: "deal-2",
+      cardId: "card-2",
+      direction: "incoming",
+      quantity: 1,
+      price: 66.58,
+      itemType: "card",
+      notes: null,
+      card: null,
+    };
+
+    mockTx.deal.findUnique.mockResolvedValue({
+      id: "deal-2",
+      location: "Card Show",
+      status: "pending",
+      items: [
+        {
+          id: "incoming-item-2",
+          dealId: "deal-2",
+          cardId: "card-2",
+          direction: "incoming",
+          quantity: 1,
+          price: 83.22,
+          itemType: "card",
+          notes: null,
+          card: null,
+        },
+      ],
+    });
+
+    mockTx.dealItem.update.mockResolvedValue(discountedItem);
+    mockTx.deal.update.mockResolvedValue({
+      id: "deal-2",
+      location: "Card Show",
+      status: "finalized",
+      dateFinalized: new Date(),
+      items: [discountedItem],
+    });
+
+    const app = await buildApp();
+    const response = await request(app).post("/api/deals/deal-2/finalize");
+
+    expect(response.status).toBe(200);
+    expect(mockTx.dealItem.update).toHaveBeenCalledWith({
+      where: { id: "incoming-item-2" },
+      data: { price: 66.58 },
+    });
+    expect(mockTx.deal.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "deal-2" },
+        data: expect.objectContaining({
+          status: "finalized",
+          finalizedTradePercentage: 80,
+        }),
+      }),
+    );
+    expect(response.body.incoming[0].price).toBe(66.58);
   });
 });
