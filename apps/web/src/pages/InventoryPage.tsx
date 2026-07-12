@@ -300,8 +300,9 @@ export const InventoryPage: FC = () => {
       return sortDir === "asc" ? aDelta - bDelta : bDelta - aDelta;
     });
 
-    return sorted;
-  }, [items, priceChangeByItemId, sortBy, sortDir]);
+    const start = (page - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+  }, [items, page, priceChangeByItemId, sortBy, sortDir]);
 
   let manualItemPlaceholder = "e.g., Charizard Base Set";
   if (addItemType === "sealed") {
@@ -342,15 +343,55 @@ export const InventoryPage: FC = () => {
     [filterStorageType, inventorySearch, sortBy, sortDir],
   );
 
+  const loadInventoryPage = useCallback(
+    async (customPage: number) => {
+      const params = buildInventoryQueryParams(customPage);
+      const response = await axios.get("/api/inventory", { params });
+      setItems(response.data.items);
+      setTotalValue(response.data.totalValue);
+      setTotalCount(response.data.total ?? 0);
+    },
+    [buildInventoryQueryParams],
+  );
+
+  const loadAllInventory = useCallback(async () => {
+    const chunkSize = 2000;
+    let offset = 0;
+    let total = 0;
+    let totalValue = 0;
+    const allItems: InventoryItem[] = [];
+
+    while (true) {
+      const customPage = Math.floor(offset / chunkSize) + 1;
+      const params = buildInventoryQueryParams(customPage, chunkSize);
+      const response = await axios.get("/api/inventory", { params });
+      const pageItems = response.data.items ?? [];
+
+      total = response.data.total ?? total;
+      totalValue = response.data.totalValue;
+      allItems.push(...pageItems);
+
+      if (allItems.length >= total || pageItems.length < chunkSize) {
+        break;
+      }
+
+      offset += chunkSize;
+    }
+
+    setItems(allItems);
+    setTotalValue(totalValue);
+    setTotalCount(total);
+  }, [buildInventoryQueryParams]);
+
   useEffect(() => {
+    if (sortBy === "priceChange") {
+      return;
+    }
+
     const loadInventory = async () => {
       setLoading(true);
       try {
-        const params = buildInventoryQueryParams(page);
-        const response = await axios.get("/api/inventory", { params });
-        setItems(response.data.items);
-        setTotalValue(response.data.totalValue);
-        setTotalCount(response.data.total ?? 0);
+        await loadInventoryPage(page);
       } catch (error) {
         console.error("Failed to fetch inventory:", error);
       } finally {
@@ -359,15 +400,35 @@ export const InventoryPage: FC = () => {
     };
 
     void loadInventory();
-  }, [buildInventoryQueryParams, page]);
+  }, [loadInventoryPage, page, sortBy]);
 
-  const reloadInventory = async () => {
-    const params = buildInventoryQueryParams(page);
-    const response = await axios.get("/api/inventory", { params });
-    setItems(response.data.items);
-    setTotalValue(response.data.totalValue);
-    setTotalCount(response.data.total ?? 0);
-  };
+  useEffect(() => {
+    if (sortBy !== "priceChange") {
+      return;
+    }
+
+    const loadInventory = async () => {
+      setLoading(true);
+      try {
+        await loadAllInventory();
+      } catch (error) {
+        console.error("Failed to fetch inventory:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadInventory();
+  }, [loadAllInventory, sortBy]);
+
+  const reloadInventory = useCallback(async () => {
+    if (sortBy === "priceChange") {
+      await loadAllInventory();
+      return;
+    }
+
+    await loadInventoryPage(page);
+  }, [loadAllInventory, loadInventoryPage, page, sortBy]);
 
   const removeInventoryItem = async (itemId: string) => {
     try {

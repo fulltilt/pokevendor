@@ -554,7 +554,9 @@ export const DealTrackerPage: FC = () => {
 
     setIsFinalizingDeal(true);
     try {
-      await axios.post(`/api/deals/${currentDeal.id}/finalize`);
+      await axios.post(`/api/deals/${currentDeal.id}/finalize`, {
+        outgoingTradePercentage,
+      });
       setCurrentDeal(null);
       setIncomingTotal(0);
       setOutgoingTotal(0);

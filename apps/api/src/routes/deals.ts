@@ -10,6 +10,15 @@ const INSUFFICIENT_INVENTORY_PREFIX = "INSUFFICIENT_INVENTORY:";
 const INSUFFICIENT_INVENTORY_FOR_DELETE_PREFIX =
   "INSUFFICIENT_INVENTORY_FOR_DELETE:";
 
+const normalizeFinalizedPercentage = (value: unknown): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 100;
+  }
+
+  return Math.min(Math.max(parsed, 0), 100);
+};
+
 const syncIncomingItemsToInventory = async (
   tx: Prisma.TransactionClient,
   incomingItems: Array<{
@@ -173,7 +182,10 @@ const rollbackFinalizedDealInventorySync = async (
   });
 };
 
-const finalizeDealWithInventorySync = async (dealId: string) => {
+const finalizeDealWithInventorySync = async (
+  dealId: string,
+  incomingPercentage: number,
+) => {
   return prisma.$transaction(async (tx) => {
     const existingDeal = await tx.deal.findUnique({
       where: { id: dealId },
@@ -197,9 +209,30 @@ const finalizeDealWithInventorySync = async (dealId: string) => {
       (item) => item.direction === "outgoing",
     );
 
+    const finalizedIncomingItems = await Promise.all(
+      incomingItems.map(async (item) => {
+        if (item.itemType === "cash") {
+          return item;
+        }
+
+        const discountedPrice = Number(
+          (item.price * (incomingPercentage / 100)).toFixed(2),
+        );
+
+        if (Math.abs(discountedPrice - item.price) < 0.0001) {
+          return item;
+        }
+
+        return tx.dealItem.update({
+          where: { id: item.id },
+          data: { price: discountedPrice },
+        });
+      }),
+    );
+
     await syncIncomingItemsToInventory(
       tx,
-      incomingItems,
+      finalizedIncomingItems,
       existingDeal.location,
     );
     await applyOutgoingInventoryAdjustments(tx, outgoingItems);
@@ -586,7 +619,13 @@ router.delete("/items/:itemId", async (req: Request, res: Response) => {
 router.post("/:dealId/finalize", async (req: Request, res: Response) => {
   try {
     const { dealId } = req.params;
-    const deal = await finalizeDealWithInventorySync(dealId);
+    const incomingPercentage = normalizeFinalizedPercentage(
+      req.body?.outgoingTradePercentage,
+    );
+    const deal = await finalizeDealWithInventorySync(
+      dealId,
+      incomingPercentage,
+    );
 
     const incoming = deal.items.filter((item) => item.direction === "incoming");
     const outgoing = deal.items.filter((item) => item.direction === "outgoing");
