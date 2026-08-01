@@ -2648,3 +2648,37 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* eBay last-sold lookup */
+.ebay-lookup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.ebay-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ebay-result-chip {
+  padding: 0.3rem 0.65rem;
+  background: rgba(242, 181, 68, 0.12);
+  border: 1px solid rgba(242, 181, 68, 0.35);
+  border-radius: 999px;
+  color: var(--accent-hover);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.ebay-result-chip:hover {
+  background: rgba(242, 181, 68, 0.22);
+  border-color: rgba(242, 181, 68, 0.65);
+}

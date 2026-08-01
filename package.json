@@ -13,6 +13,7 @@
     "embed:cards": "node --import tsx scripts/backfill-card-embeddings.ts",
     "embed:index": "node --import tsx scripts/create-embedding-hnsw-index.ts",
     "embed:eval": "node --import tsx scripts/eval-embedding-retrieval.ts",
+    "seed:set": "node --import tsx scripts/seed-set-images.ts",
     "sync:tcgplayer-ids": "node --import tsx scripts/sync-tcgplayer-ids.ts",
     "db:backup": "./scripts/backup-db.sh",
     "db:restore": "./scripts/restore-db.sh"

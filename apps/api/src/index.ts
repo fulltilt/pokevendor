@@ -24,11 +24,13 @@ import cardRoutes from "./routes/cards.js";
 import inventoryRoutes from "./routes/inventory.js";
 import dealRoutes from "./routes/deals.js";
 import locationRoutes from "./routes/locations.js";
+import ebayRoutes from "./routes/ebay.js";
 
 app.use("/api/cards", cardRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/deals", dealRoutes);
 app.use("/api/locations", locationRoutes);
+app.use("/api/ebay", ebayRoutes);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: any) => {

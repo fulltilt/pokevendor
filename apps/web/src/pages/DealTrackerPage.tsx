@@ -125,6 +125,23 @@ export const DealTrackerPage: FC = () => {
   const [isSubmittingManualOutgoingCard, setIsSubmittingManualOutgoingCard] =
     useState(false);
 
+  // eBay last-sold lookups for sealed/slab forms
+  type EbayResult = {
+    title: string;
+    soldPrice: number;
+    soldAt: string;
+    condition: string;
+    url: string;
+  };
+  const [incomingEbayResults, setIncomingEbayResults] = useState<EbayResult[]>(
+    [],
+  );
+  const [incomingEbayLoading, setIncomingEbayLoading] = useState(false);
+  const [outgoingEbayResults, setOutgoingEbayResults] = useState<EbayResult[]>(
+    [],
+  );
+  const [outgoingEbayLoading, setOutgoingEbayLoading] = useState(false);
+
   const [targetNetCash, setTargetNetCash] = useState("0");
   const [isApplyingCash, setIsApplyingCash] = useState(false);
   const [outgoingTradePercentage, setOutgoingTradePercentage] = useState(80);
@@ -468,6 +485,28 @@ export const DealTrackerPage: FC = () => {
       setDealNotice("Failed to add item.");
     } finally {
       setIsSubmittingManualIncoming(false);
+    }
+  };
+
+  const runEbayLookup = async (
+    query: string,
+    setLoading: (v: boolean) => void,
+    setResults: (v: EbayResult[]) => void,
+  ) => {
+    const q = query.trim();
+    if (!q) return;
+    setLoading(true);
+    setResults([]);
+    try {
+      const response = await axios.get("/api/ebay/last-sold", {
+        params: { q, limit: 5 },
+      });
+      setResults((response.data?.results ?? []) as EbayResult[]);
+    } catch (error) {
+      console.error("eBay lookup failed:", error);
+      setResults([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1485,6 +1524,46 @@ export const DealTrackerPage: FC = () => {
                         </label>
                       </div>
 
+                      {manualIncomingName.trim() && (
+                        <div className="ebay-lookup-row">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={incomingEbayLoading}
+                            onClick={() =>
+                              void runEbayLookup(
+                                manualIncomingName,
+                                setIncomingEbayLoading,
+                                setIncomingEbayResults,
+                              )
+                            }
+                          >
+                            {incomingEbayLoading
+                              ? "Looking up..."
+                              : "eBay Last Sold"}
+                          </button>
+                          {incomingEbayResults.length > 0 && (
+                            <div className="ebay-results">
+                              {incomingEbayResults.map((r, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="ebay-result-chip"
+                                  title={`${r.title}\n${r.condition} · ${new Date(r.soldAt).toLocaleDateString()}`}
+                                  onClick={() =>
+                                    setManualIncomingPrice(
+                                      r.soldPrice.toFixed(2),
+                                    )
+                                  }
+                                >
+                                  ${r.soldPrice.toFixed(2)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <button
                         type="button"
                         className="btn-primary"
@@ -1717,6 +1796,46 @@ export const DealTrackerPage: FC = () => {
                           />
                         </label>
                       </div>
+
+                      {manualOutgoingName.trim() && (
+                        <div className="ebay-lookup-row">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={outgoingEbayLoading}
+                            onClick={() =>
+                              void runEbayLookup(
+                                manualOutgoingName,
+                                setOutgoingEbayLoading,
+                                setOutgoingEbayResults,
+                              )
+                            }
+                          >
+                            {outgoingEbayLoading
+                              ? "Looking up..."
+                              : "eBay Last Sold"}
+                          </button>
+                          {outgoingEbayResults.length > 0 && (
+                            <div className="ebay-results">
+                              {outgoingEbayResults.map((r, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="ebay-result-chip"
+                                  title={`${r.title}\n${r.condition} · ${new Date(r.soldAt).toLocaleDateString()}`}
+                                  onClick={() =>
+                                    setManualOutgoingPrice(
+                                      r.soldPrice.toFixed(2),
+                                    )
+                                  }
+                                >
+                                  ${r.soldPrice.toFixed(2)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <button
                         type="button"

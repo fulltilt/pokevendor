@@ -244,6 +244,16 @@ export const InventoryPage: FC = () => {
   const [manualItemName, setManualItemName] = useState("");
   const [isAddingManual, setIsAddingManual] = useState(false);
   const [editManualItemName, setEditManualItemName] = useState("");
+
+  type EbayResult = {
+    title: string;
+    soldPrice: number;
+    soldAt: string;
+    condition: string;
+    url: string;
+  };
+  const [addEbayResults, setAddEbayResults] = useState<EbayResult[]>([]);
+  const [addEbayLoading, setAddEbayLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [inventorySearch, setInventorySearch] = useState("");
   const [page, setPage] = useState(1);
@@ -624,6 +634,24 @@ export const InventoryPage: FC = () => {
     } catch (error) {
       console.error("Failed to add inventory item:", error);
       setInventoryNotice("Failed to add card to inventory.");
+    }
+  };
+
+  const runAddEbayLookup = async (query: string) => {
+    const q = query.trim();
+    if (!q) return;
+    setAddEbayLoading(true);
+    setAddEbayResults([]);
+    try {
+      const response = await axios.get("/api/ebay/last-sold", {
+        params: { q, limit: 5 },
+      });
+      setAddEbayResults((response.data?.results ?? []) as EbayResult[]);
+    } catch (error) {
+      console.error("eBay lookup failed:", error);
+      setAddEbayResults([]);
+    } finally {
+      setAddEbayLoading(false);
     }
   };
 
@@ -1217,6 +1245,38 @@ export const InventoryPage: FC = () => {
                   />
                 </label>
               </div>
+
+              {(addItemType === "sealed" || addItemType === "slab") &&
+                manualItemName.trim() && (
+                  <div className="ebay-lookup-row">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      disabled={addEbayLoading}
+                      onClick={() => void runAddEbayLookup(manualItemName)}
+                    >
+                      {addEbayLoading ? "Looking up..." : "eBay Last Sold"}
+                    </button>
+                    {addEbayResults.length > 0 && (
+                      <div className="ebay-results">
+                        {addEbayResults.map((r, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            className="ebay-result-chip"
+                            title={`${r.title}\n${r.condition} · ${new Date(r.soldAt).toLocaleDateString()}`}
+                            onClick={() => {
+                              setPurchasePrice(r.soldPrice.toFixed(2));
+                              setCurrentAsk(r.soldPrice.toFixed(2));
+                            }}
+                          >
+                            ${r.soldPrice.toFixed(2)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               {inventoryNotice && (
                 <div className="search-status-banner">{inventoryNotice}</div>
