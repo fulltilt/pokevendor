@@ -26,6 +26,7 @@ const syncIncomingItemsToInventory = async (
     cardId: string | null;
     quantity: number;
     price: number;
+    marketPrice: number;
     itemType: string;
   }>,
   location: string | null,
@@ -45,7 +46,7 @@ const syncIncomingItemsToInventory = async (
         pricePurchasedAt: item.price,
         purchasedAt: new Date(),
         purchasedFrom: location || "Deal",
-        priceCurrentAsk: item.price,
+        priceCurrentAsk: item.marketPrice,
       },
     });
   }
@@ -174,7 +175,11 @@ const rollbackFinalizedDealInventorySync = async (
   );
 
   // Reversing a finalized deal means restoring outgoing cards first.
-  await syncIncomingItemsToInventory(tx, outgoingItems, deal.location);
+  await syncIncomingItemsToInventory(
+    tx,
+    outgoingItems.map((item) => ({ ...item, marketPrice: Number(item.price) })),
+    deal.location,
+  );
 
   // Then remove what that deal originally added to inventory.
   await removeInventoryQuantities(tx, incomingItems, {
@@ -213,21 +218,23 @@ const finalizeDealWithInventorySync = async (
     const finalizedIncomingItems = await Promise.all(
       incomingItems.map(async (item) => {
         if (item.itemType === "cash") {
-          return item;
+          return { ...item, marketPrice: Number(item.price) };
         }
 
+        const originalPrice = Number(item.price);
         const discountedPrice = Number(
-          (item.price * (incomingPercentage / 100)).toFixed(2),
+          (originalPrice * (incomingPercentage / 100)).toFixed(2),
         );
 
-        if (Math.abs(discountedPrice - item.price) < 0.0001) {
-          return item;
+        if (Math.abs(discountedPrice - originalPrice) < 0.0001) {
+          return { ...item, marketPrice: originalPrice };
         }
 
-        return tx.dealItem.update({
+        const updated = await tx.dealItem.update({
           where: { id: item.id },
           data: { price: discountedPrice },
         });
+        return { ...updated, marketPrice: originalPrice };
       }),
     );
 
@@ -314,6 +321,71 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
     res.json(item);
   } catch {
     res.status(500).json({ error: "Failed to add deal item" });
+  }
+});
+
+// Search deals by card name — returns finalized deals that contain a matching card
+router.get("/by-card", async (req: Request, res: Response) => {
+  try {
+    const { q } = req.query;
+    if (!q || typeof q !== "string" || !q.trim()) {
+      return res.status(400).json({ error: "Query parameter q is required" });
+    }
+
+    const pattern = `%${q.trim()}%`;
+
+    const matchingDealIds = await prisma.$queryRaw<{ dealId: string }[]>`
+      SELECT DISTINCT di."dealId"
+      FROM "DealItem" di
+      JOIN "Card" c ON c.id = di."cardId"
+      JOIN "Deal" d ON d.id = di."dealId"
+      WHERE d.status = 'finalized'
+        AND c.data->>'name' ILIKE ${pattern}
+    `;
+
+    if (matchingDealIds.length === 0) {
+      return res.json({ deals: [], total: 0 });
+    }
+
+    const dealIds = matchingDealIds.map((r) => r.dealId);
+
+    const deals = await prisma.deal.findMany({
+      where: { id: { in: dealIds } },
+      include: {
+        items: {
+          include: {
+            card: { select: { id: true, data: true, tcgPlayerId: true } },
+          },
+        },
+      },
+      orderBy: { dateFinalized: "desc" },
+    });
+
+    const formatted = deals.map((deal) => {
+      const incoming = deal.items.filter((i) => i.direction === "incoming");
+      const outgoing = deal.items.filter((i) => i.direction === "outgoing");
+      const incomingTotal = incoming.reduce(
+        (s, i) => s + i.price * i.quantity,
+        0,
+      );
+      const outgoingTotal = outgoing.reduce(
+        (s, i) => s + i.price * i.quantity,
+        0,
+      );
+      return {
+        ...deal,
+        incoming,
+        outgoing,
+        incomingTotal,
+        outgoingTotal,
+        netCash: outgoingTotal - incomingTotal,
+      };
+    });
+
+    res.json({ deals: formatted, total: formatted.length });
+  } catch (error) {
+    console.error("Deal by-card search failed:", error);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 

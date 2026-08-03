@@ -4,7 +4,7 @@ import axios from "axios";
 import { cn } from "../lib/utils";
 
 type SortBy = "dateDesc" | "dateAsc" | "location";
-type View = "deals" | "showAnalytics" | "timeAnalytics";
+type View = "deals" | "showAnalytics" | "timeAnalytics" | "cardSearch";
 type GroupBy = "month" | "year";
 
 interface DealCardData {
@@ -135,6 +135,14 @@ export const DealHistoryPage: FC = () => {
 
   // --- CRUD modals state ---
   const [editingDealId, setEditingDealId] = useState<string | null>(null);
+
+  // --- Card search state ---
+  const [cardSearchQuery, setCardSearchQuery] = useState("");
+  const [cardSearchResults, setCardSearchResults] = useState<DealSummary[]>([]);
+  const [cardSearchLoading, setCardSearchLoading] = useState(false);
+  const [cardSearchExpanded, setCardSearchExpanded] = useState<string | null>(
+    null,
+  );
   const [editLocation, setEditLocation] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editItems, setEditItems] = useState<EditableDealItem[]>([]);
@@ -212,6 +220,33 @@ export const DealHistoryPage: FC = () => {
     };
     void load();
   }, [q, sortBy, page]);
+
+  useEffect(() => {
+    if (view !== "cardSearch") return;
+    const trimmed = cardSearchQuery.trim();
+    if (!trimmed) {
+      setCardSearchResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setCardSearchLoading(true);
+      try {
+        const res = await axios.get<{ deals: DealSummary[] }>(
+          "/api/deals/by-card",
+          {
+            params: { q: trimmed },
+          },
+        );
+        setCardSearchResults(res.data.deals ?? []);
+      } catch (error) {
+        console.error("Card search failed:", error);
+        setCardSearchResults([]);
+      } finally {
+        setCardSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [view, cardSearchQuery]);
 
   // --- Fetch Show (Location) Analytics ---
   useEffect(() => {
@@ -745,6 +780,18 @@ export const DealHistoryPage: FC = () => {
           onClick={() => setView("timeAnalytics")}
         >
           Time Analytics
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "rounded-[14px] border px-4 py-2.5 text-sm font-bold tracking-[0.02em] transition duration-200",
+            view === "cardSearch"
+              ? "border-white/20 bg-[linear-gradient(135deg,var(--accent-hover),var(--accent))] text-[#10171c] shadow-[0_12px_30px_rgba(242,181,68,0.18)]"
+              : "border-[rgba(157,180,186,0.16)] bg-white/4 text-[var(--text-primary)] hover:border-[rgba(242,181,68,0.4)] hover:bg-[rgba(242,181,68,0.1)]",
+          )}
+          onClick={() => setView("cardSearch")}
+        >
+          Card Search
         </button>
       </div>
 
@@ -1392,6 +1439,188 @@ export const DealHistoryPage: FC = () => {
                 </tbody>
               </table>
             </>
+          )}
+        </>
+      )}
+
+      {/* ---- CARD SEARCH VIEW ---- */}
+      {view === "cardSearch" && (
+        <>
+          <div className="deal-history-controls">
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by card name…"
+              value={cardSearchQuery}
+              onChange={(e) => {
+                setCardSearchQuery(e.target.value);
+                setCardSearchExpanded(null);
+              }}
+            />
+            {cardSearchQuery.trim() && (
+              <span className="deal-history-count">
+                {cardSearchLoading
+                  ? "Searching…"
+                  : `${cardSearchResults.length} deal${cardSearchResults.length === 1 ? "" : "s"}`}
+              </span>
+            )}
+          </div>
+
+          {!cardSearchQuery.trim() && (
+            <div className="search-status-banner">
+              Type a card name to find deals it appeared in.
+            </div>
+          )}
+
+          {!cardSearchLoading &&
+            cardSearchQuery.trim() &&
+            cardSearchResults.length === 0 && (
+              <div className="search-status-banner">
+                No finalized deals found containing a card matching &ldquo;
+                {cardSearchQuery}&rdquo;.
+              </div>
+            )}
+
+          {cardSearchResults.length > 0 && (
+            <div className="card-search-deal-list">
+              {cardSearchResults.map((deal) => {
+                const isExpanded = cardSearchExpanded === deal.id;
+                const matchingCards = [
+                  ...deal.incoming,
+                  ...deal.outgoing,
+                ].filter((item) =>
+                  item.card?.data?.name
+                    ?.toLowerCase()
+                    .includes(cardSearchQuery.trim().toLowerCase()),
+                );
+                return (
+                  <div key={deal.id} className="card-search-deal-card">
+                    <button
+                      type="button"
+                      className="card-search-deal-header"
+                      onClick={() =>
+                        setCardSearchExpanded(isExpanded ? null : deal.id)
+                      }
+                    >
+                      <div className="card-search-deal-meta">
+                        <span className="card-search-deal-date">
+                          {fmtDate(deal.dateFinalized ?? deal.dateCreated)}
+                        </span>
+                        {deal.location && (
+                          <span className="card-search-deal-location">
+                            {deal.location}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="card-search-deal-matches">
+                        {matchingCards.map((item) => (
+                          <div key={item.id} className="card-search-match-chip">
+                            {item.card?.data?.images?.small && (
+                              <img
+                                src={item.card.data.images.small}
+                                alt={item.card.data.name}
+                                className="card-search-match-thumb"
+                              />
+                            )}
+                            <span className="card-search-match-name">
+                              {item.card?.data?.name}
+                            </span>
+                            <span
+                              className={`deal-direction-label deal-direction-label--${item.direction}`}
+                            >
+                              {item.direction}
+                            </span>
+                            <span className="card-search-match-price">
+                              {fmt(item.price)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="card-search-deal-totals">
+                        <span>
+                          {deal.incoming.length + deal.outgoing.length} items
+                        </span>
+                        <span className={netClass(deal.netCash)}>
+                          {fmtSigned(deal.netCash)}
+                        </span>
+                        <span className="deal-expand-btn">
+                          {isExpanded ? "▲" : "▼"}
+                        </span>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="deal-detail-grid card-search-deal-detail">
+                        {(["incoming", "outgoing"] as const).map((dir) => (
+                          <div key={dir} className="deal-detail-col">
+                            <div className="deal-detail-col-header">
+                              {dir === "incoming" ? "Incoming" : "Outgoing"}
+                            </div>
+                            {deal[dir].length === 0 && (
+                              <div className="text-muted">No items</div>
+                            )}
+                            {deal[dir].map((item) => (
+                              <div
+                                key={item.id}
+                                className={`deal-detail-item${
+                                  item.card?.data?.name
+                                    ?.toLowerCase()
+                                    .includes(
+                                      cardSearchQuery.trim().toLowerCase(),
+                                    )
+                                    ? " card-search-highlight"
+                                    : ""
+                                }`}
+                              >
+                                {item.card?.data?.images?.small ? (
+                                  <img
+                                    src={item.card.data.images.small}
+                                    alt={item.card.data.name}
+                                    className="deal-detail-thumb"
+                                  />
+                                ) : (
+                                  <div className="deal-detail-thumb deal-detail-thumb--empty" />
+                                )}
+                                <div className="deal-detail-item-info">
+                                  <span className="deal-detail-item-name">
+                                    {item.notes ||
+                                      item.card?.data?.name ||
+                                      item.itemType}
+                                    {item.itemType !== "card" && (
+                                      <span className="item-type-badge">
+                                        {" "}
+                                        [{item.itemType}]
+                                      </span>
+                                    )}
+                                  </span>
+                                  {(item.card?.data?.number ||
+                                    item.card?.data?.set?.name) && (
+                                    <span className="deal-detail-item-meta">
+                                      {item.card.data.number &&
+                                        `#${item.card.data.number}`}
+                                      {item.card.data.number &&
+                                        item.card.data.set?.name &&
+                                        " · "}
+                                      {item.card.data.set?.name}
+                                    </span>
+                                  )}
+                                  <span className="deal-detail-item-price">
+                                    {item.quantity} × {fmt(item.price)} ={" "}
+                                    {fmt(item.quantity * item.price)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </>
       )}

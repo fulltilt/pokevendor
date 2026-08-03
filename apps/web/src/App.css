@@ -2682,3 +2682,114 @@ body {
   background: rgba(242, 181, 68, 0.22);
   border-color: rgba(242, 181, 68, 0.65);
 }
+
+/* ---- Deal History: Card Search view ---- */
+.card-search-deal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.card-search-deal-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(20, 51, 63, 0.6);
+  transition: border-color 0.15s;
+}
+
+.card-search-deal-card:hover {
+  border-color: rgba(242, 181, 68, 0.3);
+}
+
+.card-search-deal-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  flex-wrap: wrap;
+}
+
+.card-search-deal-header:hover {
+  background: rgba(242, 181, 68, 0.04);
+}
+
+.card-search-deal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.card-search-deal-date {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-search-deal-location {
+  font-size: 0.75rem;
+  color: var(--accent-hover);
+}
+
+.card-search-deal-matches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+.card-search-match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.25rem;
+  background: rgba(242, 181, 68, 0.1);
+  border: 1px solid rgba(242, 181, 68, 0.25);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.card-search-match-thumb {
+  width: 22px;
+  height: auto;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.card-search-match-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-search-match-price {
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.card-search-deal-totals {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.card-search-deal-detail {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+}
+
+.card-search-highlight {
+  background: rgba(242, 181, 68, 0.07);
+  border-radius: 8px;
+}

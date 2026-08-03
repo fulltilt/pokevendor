@@ -81,13 +81,16 @@ export const CardSearch: React.FC = () => {
         </select>
       </div>
 
-      {loading && <div className="loading">Searching...</div>}
-
-      {!loading && query && total > 0 && (
+      {query && total > 0 && (
         <div className="search-meta">
           Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, total)}{" "}
           of {total}
+          {loading ? " …" : ""}
         </div>
+      )}
+
+      {loading && cards.length === 0 && (
+        <div className="loading">Searching...</div>
       )}
 
       <div className="cards-grid">
@@ -106,7 +109,7 @@ export const CardSearch: React.FC = () => {
         <div className="no-results">No cards found</div>
       )}
 
-      {!loading && total > pageSize && (
+      {total > pageSize && (
         <div className="pagination-controls">
           <button
             className="page-btn"
