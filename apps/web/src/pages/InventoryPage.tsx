@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FC } from "react";
 import axios from "axios";
 import { cn } from "../lib/utils";
@@ -588,7 +589,11 @@ export const InventoryPage: FC = () => {
     }
   };
 
-  const addCardToInventory = async (card: SearchCard, price?: number) => {
+  const addCardToInventory = async (
+    card: SearchCard,
+    price?: number,
+    condition?: string,
+  ) => {
     // Auto-fill both purchase and current ask prices from the market price when provided
     // Only for card type — sealed/slab should be manually priced
     const shouldUseFetchedPrice = addItemType === "card" && price != null;
@@ -608,7 +613,7 @@ export const InventoryPage: FC = () => {
         cardId: card.id,
         quantity: Number.parseInt(addQuantity) || 1,
         type: addItemType,
-        condition: addCondition,
+        condition: condition ?? addCondition,
         storageType: addStorageType,
         pricePurchasedAt: effectivePurchasePrice,
         purchasedAt: purchaseDate,
@@ -968,183 +973,78 @@ export const InventoryPage: FC = () => {
         </>
       )}
 
-      {editingItem && (
-        <div
-          className="modal-overlay"
-          onClick={closeEditModal}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") closeEditModal();
-          }}
-          role="presentation"
-        >
+      {editingItem &&
+        createPortal(
           <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
+            className="modal-overlay"
+            onClick={closeEditModal}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") closeEditModal();
+            }}
+            role="presentation"
           >
-            <div className="modal-header">
-              <h2>Edit Inventory Item</h2>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={closeEditModal}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-form">
-              <div className="selected-card-info">
-                <strong>
-                  {editingItem.notes ||
-                    editingItem.card?.data?.name ||
-                    editingItem.cardId}
-                </strong>
-                {editingItem.card?.data?.number && (
-                  <span> #{editingItem.card.data.number}</span>
-                )}
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="modal-header">
+                <h2>Edit Inventory Item</h2>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeEditModal}
+                >
+                  ✕
+                </button>
               </div>
 
-              {editItemType !== "card" && (
-                <label className="field-group field-group-wide">
-                  <span>Item Name / Description</span>
+              <div className="modal-form">
+                <div className="selected-card-info">
+                  <strong>
+                    {editingItem.notes ||
+                      editingItem.card?.data?.name ||
+                      editingItem.cardId}
+                  </strong>
+                  {editingItem.card?.data?.number && (
+                    <span> #{editingItem.card.data.number}</span>
+                  )}
+                </div>
+
+                {editItemType !== "card" && (
+                  <label className="field-group field-group-wide">
+                    <span>Item Name / Description</span>
+                    <input
+                      type="text"
+                      value={editManualItemName}
+                      onChange={(e) => setEditManualItemName(e.target.value)}
+                      placeholder={
+                        editItemType === "sealed"
+                          ? "e.g., Pokémon Scarlet/Violet Booster Box"
+                          : "e.g., Charizard PSA 9"
+                      }
+                    />
+                  </label>
+                )}
+
+                <label className="field-group">
+                  <span>Quantity</span>
                   <input
-                    type="text"
-                    value={editManualItemName}
-                    onChange={(e) => setEditManualItemName(e.target.value)}
-                    placeholder={
-                      editItemType === "sealed"
-                        ? "e.g., Pokémon Scarlet/Violet Booster Box"
-                        : "e.g., Charizard PSA 9"
-                    }
+                    type="number"
+                    min="1"
+                    value={editQuantity}
+                    onChange={(e) => setEditQuantity(e.target.value)}
                   />
                 </label>
-              )}
 
-              <label className="field-group">
-                <span>Quantity</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={editQuantity}
-                  onChange={(e) => setEditQuantity(e.target.value)}
-                />
-              </label>
-
-              <label className="field-group">
-                <span>Type</span>
-                <select
-                  value={editItemType}
-                  onChange={(e) =>
-                    setEditItemType(e.target.value as InventoryType)
-                  }
-                >
-                  <option value="card">Card</option>
-                  <option value="sealed">Sealed</option>
-                  <option value="slab">Slab</option>
-                </select>
-              </label>
-
-              <label className="field-group">
-                <span>Storage</span>
-                <select
-                  value={editStorageType}
-                  onChange={(e) =>
-                    setEditStorageType(
-                      e.target.value as "in_case" | "not_in_case",
-                    )
-                  }
-                >
-                  <option value="in_case">In Case</option>
-                  <option value="not_in_case">Not In Case</option>
-                </select>
-              </label>
-
-              <label className="field-group">
-                <span>Condition</span>
-                <select
-                  value={editCondition}
-                  onChange={(e) =>
-                    setEditCondition(normalizeCardCondition(e.target.value))
-                  }
-                >
-                  {CONDITION_OPTIONS.map((condition) => (
-                    <option key={condition} value={condition}>
-                      {condition}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field-group">
-                <span>Purchase Price</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editPurchasePrice}
-                  onChange={(e) => setEditPurchasePrice(e.target.value)}
-                />
-              </label>
-
-              <label className="field-group">
-                <span>Current Ask</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editCurrentAsk}
-                  onChange={(e) => setEditCurrentAsk(e.target.value)}
-                />
-              </label>
-
-              <div className="modal-actions">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={closeEditModal}
-                  disabled={editSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void saveEdits()}
-                  disabled={editSaving}
-                >
-                  {editSaving ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddModal && (
-        <div className="modal-overlay" onClick={closeAddModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add to Inventory</h2>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={closeAddModal}
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="context-form-grid">
                 <label className="field-group">
                   <span>Type</span>
                   <select
-                    value={addItemType}
+                    value={editItemType}
                     onChange={(e) =>
-                      setAddItemType(e.target.value as InventoryType)
+                      setEditItemType(e.target.value as InventoryType)
                     }
                   >
                     <option value="card">Card</option>
@@ -1154,21 +1054,11 @@ export const InventoryPage: FC = () => {
                 </label>
 
                 <label className="field-group">
-                  <span>Quantity</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={addQuantity}
-                    onChange={(e) => setAddQuantity(e.target.value)}
-                  />
-                </label>
-
-                <label className="field-group">
                   <span>Storage</span>
                   <select
-                    value={addStorageType}
+                    value={editStorageType}
                     onChange={(e) =>
-                      setAddStorageType(
+                      setEditStorageType(
                         e.target.value as "in_case" | "not_in_case",
                       )
                     }
@@ -1181,9 +1071,9 @@ export const InventoryPage: FC = () => {
                 <label className="field-group">
                   <span>Condition</span>
                   <select
-                    value={addCondition}
+                    value={editCondition}
                     onChange={(e) =>
-                      setAddCondition(normalizeCardCondition(e.target.value))
+                      setEditCondition(normalizeCardCondition(e.target.value))
                     }
                   >
                     {CONDITION_OPTIONS.map((condition) => (
@@ -1200,8 +1090,8 @@ export const InventoryPage: FC = () => {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={purchasePrice}
-                    onChange={(e) => setPurchasePrice(e.target.value)}
+                    value={editPurchasePrice}
+                    onChange={(e) => setEditPurchasePrice(e.target.value)}
                   />
                 </label>
 
@@ -1211,93 +1101,212 @@ export const InventoryPage: FC = () => {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={currentAsk}
-                    onChange={(e) => setCurrentAsk(e.target.value)}
+                    value={editCurrentAsk}
+                    onChange={(e) => setEditCurrentAsk(e.target.value)}
                   />
                 </label>
 
-                <label className="field-group">
-                  <span>Purchase Date</span>
-                  <input
-                    type="date"
-                    value={purchaseDate}
-                    onChange={(e) => setPurchaseDate(e.target.value)}
-                  />
-                </label>
-
-                <label className="field-group field-group-wide">
-                  <span>Purchased From</span>
-                  <input
-                    type="text"
-                    value={purchaseSource}
-                    onChange={(e) => setPurchaseSource(e.target.value)}
-                    placeholder="Shop, show, marketplace..."
-                  />
-                </label>
-
-                <label className="field-group field-group-wide">
-                  <span>Item Name / Description</span>
-                  <input
-                    type="text"
-                    value={manualItemName}
-                    onChange={(e) => setManualItemName(e.target.value)}
-                    placeholder={manualItemPlaceholder}
-                  />
-                </label>
-              </div>
-
-              {(addItemType === "sealed" || addItemType === "slab") &&
-                manualItemName.trim() && (
-                  <div className="ebay-lookup-row">
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      disabled={addEbayLoading}
-                      onClick={() => void runAddEbayLookup(manualItemName)}
-                    >
-                      {addEbayLoading ? "Looking up..." : "eBay Last Sold"}
-                    </button>
-                    {addEbayResults.length > 0 && (
-                      <div className="ebay-results">
-                        {addEbayResults.map((r, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            className="ebay-result-chip"
-                            title={`${r.title}\n${r.condition} · ${new Date(r.soldAt).toLocaleDateString()}`}
-                            onClick={() => {
-                              setPurchasePrice(r.soldPrice.toFixed(2));
-                              setCurrentAsk(r.soldPrice.toFixed(2));
-                            }}
-                          >
-                            ${r.soldPrice.toFixed(2)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-              {inventoryNotice && (
-                <div className="search-status-banner">{inventoryNotice}</div>
-              )}
-
-              <div className="manual-entry-section">
-                <button
-                  type="button"
-                  onClick={() => void addManualInventoryItem()}
-                  disabled={isAddingManual || !manualItemName.trim()}
-                  className="add-btn"
-                >
-                  {isAddingManual
-                    ? "Adding..."
-                    : `Add ${addItemType.charAt(0).toUpperCase() + addItemType.slice(1)}`}
-                </button>
+                <div className="modal-actions">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={closeEditModal}
+                    disabled={editSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void saveEdits()}
+                    disabled={editSaving}
+                  >
+                    {editSaving ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
+
+      {showAddModal &&
+        createPortal(
+          <div className="modal-overlay" onClick={closeAddModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Add to Inventory</h2>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={closeAddModal}
+                  aria-label="Close modal"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <div className="context-form-grid">
+                  <label className="field-group">
+                    <span>Type</span>
+                    <select
+                      value={addItemType}
+                      onChange={(e) =>
+                        setAddItemType(e.target.value as InventoryType)
+                      }
+                    >
+                      <option value="card">Card</option>
+                      <option value="sealed">Sealed</option>
+                      <option value="slab">Slab</option>
+                    </select>
+                  </label>
+
+                  <label className="field-group">
+                    <span>Quantity</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={addQuantity}
+                      onChange={(e) => setAddQuantity(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-group">
+                    <span>Storage</span>
+                    <select
+                      value={addStorageType}
+                      onChange={(e) =>
+                        setAddStorageType(
+                          e.target.value as "in_case" | "not_in_case",
+                        )
+                      }
+                    >
+                      <option value="in_case">In Case</option>
+                      <option value="not_in_case">Not In Case</option>
+                    </select>
+                  </label>
+
+                  <label className="field-group">
+                    <span>Condition</span>
+                    <select
+                      value={addCondition}
+                      onChange={(e) =>
+                        setAddCondition(normalizeCardCondition(e.target.value))
+                      }
+                    >
+                      {CONDITION_OPTIONS.map((condition) => (
+                        <option key={condition} value={condition}>
+                          {condition}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="field-group">
+                    <span>Purchase Price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={purchasePrice}
+                      onChange={(e) => setPurchasePrice(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-group">
+                    <span>Current Ask</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={currentAsk}
+                      onChange={(e) => setCurrentAsk(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-group">
+                    <span>Purchase Date</span>
+                    <input
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(e) => setPurchaseDate(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field-group field-group-wide">
+                    <span>Purchased From</span>
+                    <input
+                      type="text"
+                      value={purchaseSource}
+                      onChange={(e) => setPurchaseSource(e.target.value)}
+                      placeholder="Shop, show, marketplace..."
+                    />
+                  </label>
+
+                  <label className="field-group field-group-wide">
+                    <span>Item Name / Description</span>
+                    <input
+                      type="text"
+                      value={manualItemName}
+                      onChange={(e) => setManualItemName(e.target.value)}
+                      placeholder={manualItemPlaceholder}
+                    />
+                  </label>
+                </div>
+
+                {(addItemType === "sealed" || addItemType === "slab") &&
+                  manualItemName.trim() && (
+                    <div className="ebay-lookup-row">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={addEbayLoading}
+                        onClick={() => void runAddEbayLookup(manualItemName)}
+                      >
+                        {addEbayLoading ? "Looking up..." : "eBay Last Sold"}
+                      </button>
+                      {addEbayResults.length > 0 && (
+                        <div className="ebay-results">
+                          {addEbayResults.map((r, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              className="ebay-result-chip"
+                              title={`${r.title}\n${r.condition} · ${new Date(r.soldAt).toLocaleDateString()}`}
+                              onClick={() => {
+                                setPurchasePrice(r.soldPrice.toFixed(2));
+                                setCurrentAsk(r.soldPrice.toFixed(2));
+                              }}
+                            >
+                              ${r.soldPrice.toFixed(2)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                {inventoryNotice && (
+                  <div className="search-status-banner">{inventoryNotice}</div>
+                )}
+
+                <div className="manual-entry-section">
+                  <button
+                    type="button"
+                    onClick={() => void addManualInventoryItem()}
+                    disabled={isAddingManual || !manualItemName.trim()}
+                    className="add-btn"
+                  >
+                    {isAddingManual
+                      ? "Adding..."
+                      : `Add ${addItemType.charAt(0).toUpperCase() + addItemType.slice(1)}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
