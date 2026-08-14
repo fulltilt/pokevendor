@@ -109,6 +109,7 @@ model DealItem {
   quantity  Int     @default(1)
   price     Float
   itemType  String  @default("card")
+  condition String?
   notes     String?
   deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
   card      Card?   @relation(fields: [cardId], references: [id], onDelete: SetNull)

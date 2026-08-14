@@ -131,6 +131,7 @@ model DealItem {
   quantity  Int      @default(1)
   price     Float
   itemType  String   @default("card") // "card", "sealed", "slab", "cash"
+  condition String?  // Cards: NM/LP/MP/HP
   notes     String?  // Description for non-card items (sealed product name, slab label)
   
   deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)

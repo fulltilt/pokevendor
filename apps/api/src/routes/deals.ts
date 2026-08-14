@@ -28,6 +28,7 @@ const syncIncomingItemsToInventory = async (
     price: number;
     marketPrice: number;
     itemType: string;
+    condition?: string | null;
   }>,
   location: string | null,
 ) => {
@@ -41,7 +42,7 @@ const syncIncomingItemsToInventory = async (
         cardId: item.cardId,
         quantity: item.quantity,
         type: item.itemType || "card",
-        condition: item.itemType === "card" ? "NM" : null,
+        condition: item.itemType === "card" ? (item.condition ?? "NM") : null,
         storageType: "not_in_case",
         pricePurchasedAt: item.price,
         purchasedAt: new Date(),
@@ -288,6 +289,7 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
       quantity = 1,
       price,
       itemType = "card",
+      condition,
       notes,
     } = req.body;
 
@@ -314,6 +316,7 @@ router.post("/:dealId/items", async (req: Request, res: Response) => {
         quantity,
         price: safePrice,
         itemType,
+        condition: itemType === "card" ? condition || null : null,
         notes: notes || null,
       },
     });

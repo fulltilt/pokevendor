@@ -362,7 +362,11 @@ export const DealTrackerPage: FC = () => {
     }
   };
 
-  const addCardToDeal = async (card: SearchCard, price?: number) => {
+  const addCardToDeal = async (
+    card: SearchCard,
+    price?: number,
+    condition?: string,
+  ) => {
     if (!currentDeal) {
       return;
     }
@@ -377,6 +381,7 @@ export const DealTrackerPage: FC = () => {
         quantity: Number.parseInt(itemQuantity) || 1,
         price: effectivePrice,
         itemType: "card",
+        condition: condition || null,
       });
       await fetchDealDetails(currentDeal.id);
       setDealNotice(`Added ${card.data?.name || card.id} to incoming.`);

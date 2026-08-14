@@ -52,7 +52,11 @@ interface CardSearchPanelProps {
   disabled?: boolean;
   disabledMessage?: string;
   addLabel?: string;
-  onCardSelect: (card: SearchCard, price?: number) => void | Promise<void>;
+  onCardSelect: (
+    card: SearchCard,
+    price?: number,
+    condition?: string,
+  ) => void | Promise<void>;
   onCardSelected?: (card: SearchCard) => void;
 }
 
@@ -159,7 +163,7 @@ export const CardSearchPanel: FC<CardSearchPanelProps> = ({
     if (!selectedCard) return;
     setSubmitting(true);
     try {
-      await onCardSelect(selectedCard, selectedPrice);
+      await onCardSelect(selectedCard, selectedPrice, condition.toUpperCase());
       // Clear selection after successful add
       setSelectedCard(null);
       setPriceData(null);
