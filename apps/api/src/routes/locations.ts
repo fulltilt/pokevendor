@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 router.get("/", async (req: Request, res: Response) => {
   try {
     const locations = await prisma.dealLocation.findMany({
-      orderBy: { name: "asc" },
+      orderBy: { createdAt: "desc" },
     });
 
     res.json(locations);

@@ -59,13 +59,7 @@ export const DealTrackerPage: FC = () => {
   const [draftDeals, setDraftDeals] = useState<DraftDeal[]>([]);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
   const [currentDeal, setCurrentDeal] = useState<Deal | null>(null);
-  const [location, setLocation] = useState(() => {
-    // Load last location from localStorage on mount
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("lastDealLocation") || "";
-    }
-    return "";
-  });
+  const [location, setLocation] = useState("");
   const [locations, setLocations] = useState<string[]>([]);
   const [incomingTotal, setIncomingTotal] = useState(0);
   const [outgoingTotal, setOutgoingTotal] = useState(0);
@@ -309,7 +303,11 @@ export const DealTrackerPage: FC = () => {
     const loadLocations = async () => {
       try {
         const response = await axios.get("/api/locations");
-        setLocations(response.data.map((loc: LocationOption) => loc.name));
+        const loadedLocations = response.data as LocationOption[];
+        setLocations(loadedLocations.map((loc) => loc.name));
+        if (loadedLocations[0]) {
+          setLocation(loadedLocations[0].name);
+        }
       } catch (error) {
         console.error("Failed to fetch locations:", error);
       }
@@ -345,10 +343,6 @@ export const DealTrackerPage: FC = () => {
   const createNewDeal = async () => {
     try {
       const response = await axios.post("/api/deals", { location });
-      // Persist location to localStorage
-      if (typeof window !== "undefined") {
-        localStorage.setItem("lastDealLocation", location);
-      }
       await fetchDealDetails(response.data.id, {
         resetOutgoingPercentageState: true,
       });

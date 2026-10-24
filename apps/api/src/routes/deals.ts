@@ -31,6 +31,7 @@ const syncIncomingItemsToInventory = async (
     condition?: string | null;
   }>,
   location: string | null,
+  storageType = "not_in_case",
 ) => {
   for (const item of incomingItems) {
     if (!item.cardId) {
@@ -43,7 +44,7 @@ const syncIncomingItemsToInventory = async (
         quantity: item.quantity,
         type: item.itemType || "card",
         condition: item.itemType === "card" ? (item.condition ?? "NM") : null,
-        storageType: "not_in_case",
+        storageType: item.itemType === "card" ? storageType : "not_in_case",
         pricePurchasedAt: item.price,
         purchasedAt: new Date(),
         purchasedFrom: location || "Deal",
@@ -243,6 +244,7 @@ const finalizeDealWithInventorySync = async (
       tx,
       finalizedIncomingItems,
       existingDeal.location,
+      "in_case",
     );
     await applyOutgoingInventoryAdjustments(tx, outgoingItems);
 
